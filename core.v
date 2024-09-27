@@ -1,3 +1,17 @@
+// opcodes, using only the five bits that disambiguate them
+// (the low two bits are always 11)
+localparam LUI_OPCODE = 5'b01101;
+localparam AUIPC_OPCODE = 5'b00101;
+localparam JAL_OPCODE = 5'b11011;
+localparam JALR_OPCODE = 5'b11001;
+localparam BRANCH_OPCODE = 5'b11000;
+localparam LOAD_OPCODE = 5'b00000;
+localparam STORE_OPCODE = 5'b01000;
+localparam IMMEDIATE_OPCODE = 5'b00100;
+localparam ARITHMETIC_OPCODE = 5'b01100;
+localparam FENCE_OPCODE = 5'b00011; // includes PAUSE instruction
+localparam SYSTEM_OPCODE = 5'b11100;
+
 module core(clk, program_counter, program_memory_value, memory_address, memory_value, memory_write_sections);
 
     input clk;
@@ -41,22 +55,20 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
 
     assign register_read_address_1 = instruction[19:15];
     assign register_read_address_2 = instruction[24:20];
-    assign register_write_address = (opcode != 5'b11000 && opcode != 5'b01000 && opcode != 5'b00011) ? instruction[11:7] : 0;
+    assign register_write_address = (opcode != BRANCH_OPCODE && opcode != STORE_OPCODE && opcode != FENCE_OPCODE) ? instruction[11:7] : 0;
 
-    assign memory_value = (opcode == 5'b01000) ? register_read_value_2 : 0; // store instructions
+    assign memory_value = (opcode == STORE_OPCODE) ? register_read_value_2 : 0;
     assign memory_address = alu_result;
 
     assign next_program_counter = program_counter + 4;
 
     always @* begin
-        if (opcode == 5'b11011 || opcode == 5'b11001) begin
-             // JAL(R)
+        if (opcode == JAL_OPCODE || opcode == JALR_OPCODE) begin
             register_write_value = next_program_counter;
-        end else if ((opcode == 5'b00100 || opcode == 5'b01100) && (funct3 == 3'b010 || funct3 == 3'b011)) begin
+        end else if ((opcode == IMMEDIATE_OPCODE || opcode == ARITHMETIC_OPCODE) && (funct3 == 3'b010 || funct3 == 3'b011)) begin
             // SLT(I)(U)
             register_write_value = { 31'b0, comparator_result };
-        end else if (opcode == 5'b00000) begin
-            // load instructions
+        end else if (opcode == LOAD_OPCODE) begin
             case (funct3)
                 3'b000: register_write_value = { {24{memory_value[7]}}, memory_value[7:0] }; // LB
                 3'b001: register_write_value = { {16{memory_value[15]}}, memory_value[15:0] }; // LH
@@ -71,58 +83,58 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
 
     always @(posedge clk) begin
         case (opcode)
-            5'b11011: program_counter = alu_result; // JAL
-            5'b11001: program_counter = { alu_result[31:1], 1'b0 }; // JALR
-            5'b11000: program_counter = comparator_result ? alu_result : next_program_counter; // branch instructions
+            JAL_OPCODE: program_counter = alu_result;
+            JALR_OPCODE: program_counter = { alu_result[31:1], 1'b0 };
+            BRANCH_OPCODE: program_counter = comparator_result ? alu_result : next_program_counter;
             default: program_counter = next_program_counter;
         endcase
     end
 
     always @* begin
         case (opcode)
-            5'b01101: alu_operand_1 = 0; // LUI
-            5'b00101: alu_operand_1 = program_counter; // AUIPC
-            5'b11011: alu_operand_1 = program_counter; // JAL
-            5'b11000: alu_operand_1 = program_counter; // branch instructions
+            LUI_OPCODE: alu_operand_1 = 0;
+            AUIPC_OPCODE: alu_operand_1 = program_counter;
+            JAL_OPCODE: alu_operand_1 = program_counter;
+            BRANCH_OPCODE: alu_operand_1 = program_counter;
             default: alu_operand_1 = register_read_value_1;
         endcase
     end
 
     always @* begin
         case (opcode)
-            5'b00100: alu_opcode = { instruction[30], funct3 }; // arithmetic immediate instructions
-            5'b01100: alu_opcode = { instruction[30], funct3 }; // arithmetic instructions
+            IMMEDIATE_OPCODE: alu_opcode = { instruction[30], funct3 };
+            ARITHMETIC_OPCODE: alu_opcode = { instruction[30], funct3 };
             default: alu_opcode = 4'b0;
         endcase
     end
 
     always @* begin
         case (opcode)
-            5'b01101: alu_operand_2 = { u_immediate, 12'b0 }; // LUI
-            5'b00101: alu_operand_2 = { u_immediate, 12'b0 }; // AUIPC
-            5'b11011: alu_operand_2 = { {11{j_immediate[19]}}, j_immediate, 1'b0 }; // JAL
-            5'b11001: alu_operand_2 = { {20{i_immediate[11]}}, i_immediate }; // JALR
-            5'b11000: alu_operand_2 = { {19{b_immediate[11]}}, b_immediate, 1'b0 }; // branch instructions
-            5'b00100: alu_operand_2 = { {20{i_immediate[11]}}, i_immediate }; // arithmetic immediate instructions
-            5'b00000: alu_operand_2 = { {20{i_immediate[11]}}, i_immediate }; // load instructions
-            5'b01000: alu_operand_2 = { {20{s_immediate[11]}}, s_immediate }; // store instructions
+            LUI_OPCODE: alu_operand_2 = { u_immediate, 12'b0 };
+            AUIPC_OPCODE: alu_operand_2 = { u_immediate, 12'b0 };
+            JAL_OPCODE: alu_operand_2 = { {11{j_immediate[19]}}, j_immediate, 1'b0 };
+            JALR_OPCODE: alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
+            BRANCH_OPCODE: alu_operand_2 = { {19{b_immediate[11]}}, b_immediate, 1'b0 };
+            IMMEDIATE_OPCODE: alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
+            LOAD_OPCODE: alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
+            STORE_OPCODE: alu_operand_2 = { {20{s_immediate[11]}}, s_immediate };
             default: alu_operand_2 = register_read_value_2; // arithmetic instructions
         endcase
     end
 
     always @* begin
         case (opcode)
-            5'b00100: comparator_opcode = { 1'b1, funct3[0], 1'b0 }; // SLTI(U)
-            5'b01100: comparator_opcode = { 1'b1, funct3[0], 1'b0 }; // SLT(U)
+            IMMEDIATE_OPCODE: comparator_opcode = { 1'b1, funct3[0], 1'b0 }; // SLTI(U)
+            ARITHMETIC_OPCODE: comparator_opcode = { 1'b1, funct3[0], 1'b0 }; // SLT(U)
             default: comparator_opcode = funct3; // branch instructions
         endcase
     end
 
     assign comparator_operand_1 = register_read_value_1;
-    assign comparator_operand_2 = (opcode == 5'b00100) ? { 20'b0, i_immediate } : register_read_value_2;
+    assign comparator_operand_2 = (opcode == IMMEDIATE_OPCODE) ? { 20'b0, i_immediate } : register_read_value_2;
 
     always @* begin
-        if (opcode == 5'b01000) begin
+        if (opcode == STORE_OPCODE) begin
             case (funct3)
                 3'b000: memory_write_sections = 3'b001; // SB
                 3'b001: memory_write_sections = 3'b011; // SH
