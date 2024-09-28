@@ -63,16 +63,30 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
     assign next_program_counter = program_counter + 4;
 
     always @* begin
+        alu_operand_1 = 32'bx;
         register_write_value = 32'bx;
 
         case(opcode)
+            LUI_OPCODE: begin
+                alu_operand_1 = 0;
+            end
+            AUIPC_OPCODE: begin
+                alu_operand_1 = program_counter;
+            end
             JAL_OPCODE: begin
+                alu_operand_1 = program_counter;
                 register_write_value = next_program_counter;
             end
             JALR_OPCODE: begin
+                alu_operand_1 = register_read_value_1;
                 register_write_value = next_program_counter;
             end
+            BRANCH_OPCODE: begin
+                alu_operand_1 = program_counter;
+            end
             LOAD_OPCODE: begin
+                alu_operand_1 = register_read_value_1;
+
                 case (funct3)
                     3'b000: register_write_value = { {24{memory_value[7]}}, memory_value[7:0] }; // LB
                     3'b001: register_write_value = { {16{memory_value[15]}}, memory_value[15:0] }; // LH
@@ -81,7 +95,12 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
                     default: register_write_value = memory_value; // LW
                 endcase
             end
+            STORE_OPCODE: begin
+                alu_operand_1 = program_counter;
+            end
             IMMEDIATE_OPCODE: begin
+                alu_operand_1 = register_read_value_1;
+
                 if (funct3 == 3'b010 || funct3 == 3'b011) begin
                     // SLTI(U)
                     register_write_value = { 31'b0, comparator_result };
@@ -90,6 +109,8 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
                 end
             end
             ARITHMETIC_OPCODE: begin
+                alu_operand_1 = register_read_value_1;
+
                 if (funct3 == 3'b010 || funct3 == 3'b011) begin
                     // SLT(U)
                     register_write_value = { 31'b0, comparator_result };
@@ -108,16 +129,6 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
             JALR_OPCODE: program_counter = { alu_result[31:1], 1'b0 };
             BRANCH_OPCODE: program_counter = comparator_result ? alu_result : next_program_counter;
             default: program_counter = next_program_counter;
-        endcase
-    end
-
-    always @* begin
-        case (opcode)
-            LUI_OPCODE: alu_operand_1 = 0;
-            AUIPC_OPCODE: alu_operand_1 = program_counter;
-            JAL_OPCODE: alu_operand_1 = program_counter;
-            BRANCH_OPCODE: alu_operand_1 = program_counter;
-            default: alu_operand_1 = register_read_value_1;
         endcase
     end
 
