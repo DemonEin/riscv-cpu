@@ -64,28 +64,38 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
 
     always @* begin
         alu_operand_1 = 32'bx;
+        alu_operand_2 = 32'bx;
+
         register_write_value = 32'bx;
 
         case(opcode)
             LUI_OPCODE: begin
                 alu_operand_1 = 0;
+                alu_operand_2 = { u_immediate, 12'b0 };
             end
             AUIPC_OPCODE: begin
                 alu_operand_1 = program_counter;
+                alu_operand_2 = { u_immediate, 12'b0 };
             end
             JAL_OPCODE: begin
                 alu_operand_1 = program_counter;
+                alu_operand_2 = { {11{j_immediate[19]}}, j_immediate, 1'b0 };
+
                 register_write_value = next_program_counter;
             end
             JALR_OPCODE: begin
                 alu_operand_1 = register_read_value_1;
+                alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
+
                 register_write_value = next_program_counter;
             end
             BRANCH_OPCODE: begin
                 alu_operand_1 = program_counter;
+                alu_operand_2 = { {19{b_immediate[11]}}, b_immediate, 1'b0 };
             end
             LOAD_OPCODE: begin
                 alu_operand_1 = register_read_value_1;
+                alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
 
                 case (funct3)
                     3'b000: register_write_value = { {24{memory_value[7]}}, memory_value[7:0] }; // LB
@@ -97,9 +107,11 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
             end
             STORE_OPCODE: begin
                 alu_operand_1 = program_counter;
+                alu_operand_2 = { {20{s_immediate[11]}}, s_immediate };
             end
             IMMEDIATE_OPCODE: begin
                 alu_operand_1 = register_read_value_1;
+                alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
 
                 if (funct3 == 3'b010 || funct3 == 3'b011) begin
                     // SLTI(U)
@@ -110,6 +122,7 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
             end
             ARITHMETIC_OPCODE: begin
                 alu_operand_1 = register_read_value_1;
+                alu_operand_2 = register_read_value_2;
 
                 if (funct3 == 3'b010 || funct3 == 3'b011) begin
                     // SLT(U)
@@ -137,20 +150,6 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
             IMMEDIATE_OPCODE: alu_opcode = { instruction[30], funct3 };
             ARITHMETIC_OPCODE: alu_opcode = { instruction[30], funct3 };
             default: alu_opcode = 4'b0;
-        endcase
-    end
-
-    always @* begin
-        case (opcode)
-            LUI_OPCODE: alu_operand_2 = { u_immediate, 12'b0 };
-            AUIPC_OPCODE: alu_operand_2 = { u_immediate, 12'b0 };
-            JAL_OPCODE: alu_operand_2 = { {11{j_immediate[19]}}, j_immediate, 1'b0 };
-            JALR_OPCODE: alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
-            BRANCH_OPCODE: alu_operand_2 = { {19{b_immediate[11]}}, b_immediate, 1'b0 };
-            IMMEDIATE_OPCODE: alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
-            LOAD_OPCODE: alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
-            STORE_OPCODE: alu_operand_2 = { {20{s_immediate[11]}}, s_immediate };
-            default: alu_operand_2 = register_read_value_2; // arithmetic instructions
         endcase
     end
 
