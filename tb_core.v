@@ -1,5 +1,5 @@
 module tb_core;
-    reg clk;
+    reg clock;
 
     wire [31:0] program_memory_value, memory_address;
     reg [31:0] memory_value, program_counter;
@@ -9,11 +9,11 @@ module tb_core;
 
     reg file;
 
-    core core(clk, program_counter, program_memory_value, memory_address, memory_value, memory_write_sections);
+    core core(clock, program_counter, program_memory_value, memory_address, memory_value, memory_write_sections);
 
-    always #1 clk = ~clk;
+    always #1 clock = ~clock;
 
-    always @(posedge clk) begin
+    always @(posedge clock) begin
         if (memory_write_sections[0]) begin
             memory[memory_address] = memory_value[7:0];
         end

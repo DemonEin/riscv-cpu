@@ -2,11 +2,11 @@ module tb_registers;
 
     reg [4:0] read_address, write_address;
     reg [31:0] write_value, read_value;
-    reg clk;
+    reg clock;
 
-    registers r(clk, read_address, write_address, write_value, read_value);
+    registers r(clock, read_address, write_address, write_value, read_value);
 
-    always #1 clk = !clk;
+    always #1 clock = !clock;
 
     initial begin
         read_address = 0;

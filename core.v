@@ -57,9 +57,9 @@ localparam ALU_OPCODE_RIGHT_SHIFT_ARITHMETIC = { 1'b1, FUNCT3_SRA };
 localparam ALU_OPCODE_OR = { 1'b0, FUNCT3_OR };
 localparam ALU_OPCODE_AND = { 1'b0, FUNCT3_AND };
 
-module core(clk, program_counter, program_memory_value, memory_address, memory_value, memory_write_sections);
+module core(clock, program_counter, program_memory_value, memory_address, memory_value, memory_write_sections);
 
-    input clk;
+    input clock;
     input [31:0] program_memory_value;
 
     output reg [31:0] program_counter; 
@@ -84,7 +84,7 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
     reg [3:0] alu_opcode;
     reg [2:0] comparator_opcode;
 
-    registers registers(clk, register_write_address, register_write_value, register_read_address_1, register_read_value_1, register_read_address_2, register_read_value_2);
+    registers registers(clock, register_write_address, register_write_value, register_read_address_1, register_read_value_1, register_read_address_2, register_read_value_2);
     alu alu(alu_opcode, alu_operand_1, alu_operand_2, alu_result);
     comparator comparator(comparator_opcode, comparator_operand_1, comparator_operand_2, comparator_result);
 
@@ -237,7 +237,7 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
         endcase
     end
 
-    always @(posedge clk) begin
+    always @(posedge clock) begin
         program_counter = next_program_counter;
     end
 
