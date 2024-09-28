@@ -72,6 +72,7 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
         alu_operand_2 = 32'bx;
 
         register_write_value = 32'bx;
+        memory_write_sections = 0;
 
         case(opcode)
             LUI_OPCODE: begin
@@ -117,6 +118,12 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
             STORE_OPCODE: begin
                 alu_operand_1 = program_counter;
                 alu_operand_2 = { {20{s_immediate[11]}}, s_immediate };
+
+                case (funct3)
+                    3'b000: memory_write_sections = 3'b001; // SB
+                    3'b001: memory_write_sections = 3'b011; // SH
+                    default: memory_write_sections = 3'b111; // SW 
+                endcase
             end
             IMMEDIATE_OPCODE: begin
                 alu_opcode = { instruction[30], funct3 };
@@ -162,18 +169,6 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
             BRANCH_OPCODE: program_counter = comparator_result ? alu_result : next_program_counter;
             default: program_counter = next_program_counter;
         endcase
-    end
-
-    always @* begin
-        if (opcode == STORE_OPCODE) begin
-            case (funct3)
-                3'b000: memory_write_sections = 3'b001; // SB
-                3'b001: memory_write_sections = 3'b011; // SH
-                default: memory_write_sections = 3'b111; // SW 
-            endcase
-        end else begin
-            memory_write_sections = 3'b0;
-        end
     end
 
     /*
