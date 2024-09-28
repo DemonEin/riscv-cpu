@@ -124,18 +124,23 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
 
         case(opcode)
             LUI_OPCODE: begin
+                alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = 0;
                 alu_operand_2 = { u_immediate, 12'b0 };
 
                 register_write_address = rd;
+                register_write_value = alu_result;
             end
             AUIPC_OPCODE: begin
+                alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = program_counter;
                 alu_operand_2 = { u_immediate, 12'b0 };
 
                 register_write_address = rd;
+                register_write_value = alu_result;
             end
             JAL_OPCODE: begin
+                alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = program_counter;
                 alu_operand_2 = { {11{j_immediate[19]}}, j_immediate, 1'b0 };
                 next_program_counter = alu_result;
@@ -144,6 +149,7 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
                 register_write_value = next_instruction_address;
             end
             JALR_OPCODE: begin
+                alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = register_read_value_1;
                 alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
                 next_program_counter = { alu_result[31:1], 1'b0 };
@@ -156,6 +162,7 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
                 comparator_operand_1 = register_read_value_1;
                 comparator_operand_2 = register_read_value_2;
 
+                alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = program_counter;
                 alu_operand_2 = { {19{b_immediate[11]}}, b_immediate, 1'b0 };
 
@@ -164,6 +171,7 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
                 end
             end
             LOAD_OPCODE: begin
+                alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = register_read_value_1;
                 alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
 
@@ -177,6 +185,7 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
                 endcase
             end
             STORE_OPCODE: begin
+                alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = program_counter;
                 alu_operand_2 = { {20{s_immediate[11]}}, s_immediate };
 
