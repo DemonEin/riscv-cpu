@@ -79,7 +79,8 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
     wire [2:0] funct3;
     wire comparator_result;
 
-    reg [31:0] next_program_counter, register_write_address, register_write_value, alu_operand_1, alu_operand_2, comparator_operand_1, comparator_operand_2;
+    reg [31:0] next_program_counter, register_write_value, alu_operand_1, alu_operand_2, comparator_operand_1, comparator_operand_2;
+    reg [4:0] register_write_address;
     reg [3:0] alu_opcode;
     reg [2:0] comparator_opcode;
 
