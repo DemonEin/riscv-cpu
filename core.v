@@ -71,7 +71,7 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
 
     inout [31:0] memory_value;
 
-    wire [31:0] instruction, alu_result, memory_read_value, next_program_counter, register_read_value_1, register_read_value_2;
+    wire [31:0] instruction, alu_result, memory_read_value, next_instruction_address, register_read_value_1, register_read_value_2;
     wire [19:0] u_immediate, j_immediate;
     wire [11:0] i_immediate, s_immediate, b_immediate;
     wire [4:0] opcode;
@@ -105,7 +105,7 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
     assign memory_value = (opcode == STORE_OPCODE) ? register_read_value_2 : 0;
     assign memory_address = alu_result;
 
-    assign next_program_counter = program_counter + 4;
+    assign next_instruction_address = program_counter + 4;
 
     always @* begin
         comparator_opcode = 3'bx;
@@ -132,13 +132,13 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
                 alu_operand_1 = program_counter;
                 alu_operand_2 = { {11{j_immediate[19]}}, j_immediate, 1'b0 };
 
-                register_write_value = next_program_counter;
+                register_write_value = next_instruction_address;
             end
             JALR_OPCODE: begin
                 alu_operand_1 = register_read_value_1;
                 alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
 
-                register_write_value = next_program_counter;
+                register_write_value = next_instruction_address;
             end
             BRANCH_OPCODE: begin
                 comparator_opcode = funct3;
@@ -213,8 +213,8 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
         case (opcode)
             JAL_OPCODE: program_counter = alu_result;
             JALR_OPCODE: program_counter = { alu_result[31:1], 1'b0 };
-            BRANCH_OPCODE: program_counter = comparator_result ? alu_result : next_program_counter;
-            default: program_counter = next_program_counter;
+            BRANCH_OPCODE: program_counter = comparator_result ? alu_result : next_instruction_address;
+            default: program_counter = next_instruction_address;
         endcase
     end
 
