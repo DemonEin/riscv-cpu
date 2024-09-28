@@ -46,16 +46,16 @@ localparam FUNCT3_AND = 3'b111;
 localparam FUNCT3_FENCE = 3'b000;
 localparam FUNCT3_SYSTEM = 3'b000;
 
-// values selected to align with funct3 values to minimize logic to translate
-// from funct3 to alu opcode
-localparam ALU_OPCODE_ADD = 4'b0000;
-localparam ALU_OPCODE_SUBTRACT = 4'b1000;
-localparam ALU_OPCODE_LEFT_SHIFT = 4'b0001;
-localparam ALU_OPCODE_XOR = 4'b0100;
-localparam ALU_OPCODE_RIGHT_SHIFT_LOGICAL = 4'b0101;
-localparam ALU_OPCODE_RIGHT_SHIFT_ARITHMETIC = 4'b1101;
-localparam ALU_OPCODE_OR = 4'b0110;
-localparam ALU_OPCODE_AND = 4'b0111;
+// the bit at index 3 is the bit at index 30 in the corresponding instruction
+// logic to produce the alu opcode relies on these being defined this way
+localparam ALU_OPCODE_ADD = { 1'b0, FUNCT3_ADD };
+localparam ALU_OPCODE_SUBTRACT = { 1'b1, FUNCT3_SUB };
+localparam ALU_OPCODE_LEFT_SHIFT = { 1'b0, FUNCT3_SLL };
+localparam ALU_OPCODE_XOR = { 1'b0, FUNCT3_XOR };
+localparam ALU_OPCODE_RIGHT_SHIFT_LOGICAL = { 1'b0, FUNCT3_SRL };
+localparam ALU_OPCODE_RIGHT_SHIFT_ARITHMETIC = { 1'b1, FUNCT3_SRA };
+localparam ALU_OPCODE_OR = { 1'b0, FUNCT3_OR };
+localparam ALU_OPCODE_AND = { 1'b0, FUNCT3_AND };
 
 module core(clk, program_counter, program_memory_value, memory_address, memory_value, memory_write_sections);
 
