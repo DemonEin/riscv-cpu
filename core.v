@@ -79,7 +79,7 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
     wire [2:0] funct3;
     wire comparator_result;
 
-    reg [31:0] register_write_value, alu_operand_1, alu_operand_2, comparator_operand_1, comparator_operand_2;
+    reg [31:0] next_program_counter, register_write_value, alu_operand_1, alu_operand_2, comparator_operand_1, comparator_operand_2;
     reg [3:0] alu_opcode;
     reg [2:0] comparator_opcode;
 
@@ -119,6 +119,8 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
         register_write_value = 32'bx;
         memory_write_sections = 0;
 
+        next_program_counter = next_instruction_address;
+
         case(opcode)
             LUI_OPCODE: begin
                 alu_operand_1 = 0;
@@ -131,12 +133,14 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
             JAL_OPCODE: begin
                 alu_operand_1 = program_counter;
                 alu_operand_2 = { {11{j_immediate[19]}}, j_immediate, 1'b0 };
+                next_program_counter = alu_result;
 
                 register_write_value = next_instruction_address;
             end
             JALR_OPCODE: begin
                 alu_operand_1 = register_read_value_1;
                 alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
+                next_program_counter = { alu_result[31:1], 1'b0 };
 
                 register_write_value = next_instruction_address;
             end
@@ -147,6 +151,10 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
 
                 alu_operand_1 = program_counter;
                 alu_operand_2 = { {19{b_immediate[11]}}, b_immediate, 1'b0 };
+
+                if (comparator_result) begin
+                    next_program_counter = alu_result;
+                end
             end
             LOAD_OPCODE: begin
                 alu_operand_1 = register_read_value_1;
@@ -210,12 +218,7 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
     end
 
     always @(posedge clk) begin
-        case (opcode)
-            JAL_OPCODE: program_counter = alu_result;
-            JALR_OPCODE: program_counter = { alu_result[31:1], 1'b0 };
-            BRANCH_OPCODE: program_counter = comparator_result ? alu_result : next_instruction_address;
-            default: program_counter = next_instruction_address;
-        endcase
+        program_counter = next_program_counter;
     end
 
     /*
