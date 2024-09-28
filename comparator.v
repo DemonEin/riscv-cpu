@@ -8,8 +8,7 @@ module comparator(operation, operand1, operand2, result);
             2'b00: result = operand1 == operand2;
             2'b10: result = $signed(operand1) < $signed(operand2);
             2'b11: result = operand1 < operand2;
-            // TODO make undefined
-            default: result = 0;
+            default: result = 1'bx;
         endcase
         result = result ^ operation[0];
     end
