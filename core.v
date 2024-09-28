@@ -171,7 +171,11 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
                 endcase
             end
             IMMEDIATE_OPCODE: begin
-                alu_opcode = { instruction[30], funct3 };
+                if (funct3 == FUNCT3_SLL || funct3 == FUNCT3_SRL || funct3 == FUNCT3_SRA) begin
+                    alu_opcode = { instruction[30], funct3 };
+                end else begin
+                    alu_opcode = { 1'b0, funct3 };
+                end
                 alu_operand_1 = register_read_value_1;
                 alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
 
