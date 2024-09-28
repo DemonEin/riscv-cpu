@@ -26,7 +26,7 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
 
     inout [31:0] memory_value;
 
-    wire [31:0] instruction, alu_result, memory_read_value, next_program_counter, comparator_operand_1, comparator_operand_2, register_read_value_1, register_read_value_2;
+    wire [31:0] instruction, alu_result, memory_read_value, next_program_counter, register_read_value_1, register_read_value_2;
     wire [19:0] u_immediate, j_immediate;
     wire [11:0] i_immediate, s_immediate, b_immediate;
     wire [4:0] opcode;
@@ -34,7 +34,7 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
     wire [2:0] funct3;
     wire comparator_result;
 
-    reg [31:0] register_write_value, alu_operand_1, alu_operand_2;
+    reg [31:0] register_write_value, alu_operand_1, alu_operand_2, comparator_operand_1, comparator_operand_2;
     reg [3:0] alu_opcode;
     reg [2:0] comparator_opcode;
 
@@ -63,6 +63,10 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
     assign next_program_counter = program_counter + 4;
 
     always @* begin
+        comparator_opcode = 3'bx;
+        comparator_operand_1 = 32'bx;
+        comparator_operand_2 = 32'bx;
+
         alu_opcode = 4'bx;
         alu_operand_1 = 32'bx;
         alu_operand_2 = 32'bx;
@@ -91,6 +95,10 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
                 register_write_value = next_program_counter;
             end
             BRANCH_OPCODE: begin
+                comparator_opcode = funct3;
+                comparator_operand_1 = register_read_value_1;
+                comparator_operand_2 = register_read_value_2;
+
                 alu_operand_1 = program_counter;
                 alu_operand_2 = { {19{b_immediate[11]}}, b_immediate, 1'b0 };
             end
@@ -117,6 +125,10 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
 
                 if (funct3 == 3'b010 || funct3 == 3'b011) begin
                     // SLTI(U)
+                    comparator_opcode = { 1'b1, funct3[0], 1'b0 };
+                    comparator_operand_1 = register_read_value_1;
+                    comparator_operand_2 = { 20'b0, i_immediate };
+
                     register_write_value = { 31'b0, comparator_result };
                 end else begin
                     register_write_value = alu_result;
@@ -129,6 +141,10 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
 
                 if (funct3 == 3'b010 || funct3 == 3'b011) begin
                     // SLT(U)
+                    comparator_opcode = { 1'b1, funct3[0], 1'b0 };
+                    comparator_operand_1 = register_read_value_1;
+                    comparator_operand_2 = register_read_value_2;
+
                     register_write_value = { 31'b0, comparator_result };
                 end else begin
                     register_write_value = alu_result;
@@ -147,17 +163,6 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
             default: program_counter = next_program_counter;
         endcase
     end
-
-    always @* begin
-        case (opcode)
-            IMMEDIATE_OPCODE: comparator_opcode = { 1'b1, funct3[0], 1'b0 }; // SLTI(U)
-            ARITHMETIC_OPCODE: comparator_opcode = { 1'b1, funct3[0], 1'b0 }; // SLT(U)
-            default: comparator_opcode = funct3; // branch instructions
-        endcase
-    end
-
-    assign comparator_operand_1 = register_read_value_1;
-    assign comparator_operand_2 = (opcode == IMMEDIATE_OPCODE) ? { 20'b0, i_immediate } : register_read_value_2;
 
     always @* begin
         if (opcode == STORE_OPCODE) begin
