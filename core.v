@@ -63,6 +63,7 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
     assign next_program_counter = program_counter + 4;
 
     always @* begin
+        alu_opcode = 4'bx;
         alu_operand_1 = 32'bx;
         alu_operand_2 = 32'bx;
 
@@ -110,6 +111,7 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
                 alu_operand_2 = { {20{s_immediate[11]}}, s_immediate };
             end
             IMMEDIATE_OPCODE: begin
+                alu_opcode = { instruction[30], funct3 };
                 alu_operand_1 = register_read_value_1;
                 alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
 
@@ -121,6 +123,7 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
                 end
             end
             ARITHMETIC_OPCODE: begin
+                alu_opcode = { instruction[30], funct3 };
                 alu_operand_1 = register_read_value_1;
                 alu_operand_2 = register_read_value_2;
 
@@ -142,14 +145,6 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
             JALR_OPCODE: program_counter = { alu_result[31:1], 1'b0 };
             BRANCH_OPCODE: program_counter = comparator_result ? alu_result : next_program_counter;
             default: program_counter = next_program_counter;
-        endcase
-    end
-
-    always @* begin
-        case (opcode)
-            IMMEDIATE_OPCODE: alu_opcode = { instruction[30], funct3 };
-            ARITHMETIC_OPCODE: alu_opcode = { instruction[30], funct3 };
-            default: alu_opcode = 4'b0;
         endcase
     end
 
