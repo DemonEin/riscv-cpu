@@ -12,6 +12,40 @@ localparam ARITHMETIC_OPCODE = 5'b01100;
 localparam FENCE_OPCODE = 5'b00011; // includes PAUSE instruction
 localparam SYSTEM_OPCODE = 5'b11100;
 
+localparam FUNCT3_JALR = 3'b000;
+
+localparam FUNCT3_BEQ = 3'b000;
+localparam FUNCT3_BNE = 3'b001;
+localparam FUNCT3_BLT = 3'b100;
+localparam FUNCT3_BGE = 3'b101;
+localparam FUNCT3_BLTU = 3'b110;
+localparam FUNCT3_BGEU = 3'b111;
+
+localparam FUNCT3_LB = 3'b000;
+localparam FUNCT3_LH = 3'b001;
+localparam FUNCT3_LW = 3'b010;
+localparam FUNCT3_LBU = 3'b100;
+localparam FUNCT3_LHU = 3'b101;
+
+localparam FUNCT3_SB = 3'b000;
+localparam FUNCT3_SH = 3'b001;
+
+// funct3 values for arithmetic and immediate instructions are the same,
+// so use the same for both
+localparam FUNCT3_ADD = 3'b000;
+localparam FUNCT3_SUB = 3'b000;
+localparam FUNCT3_SLL = 3'b001;
+localparam FUNCT3_SLT = 3'b010;
+localparam FUNCT3_SLTU = 3'b011;
+localparam FUNCT3_XOR = 3'b100;
+localparam FUNCT3_SRL = 3'b101;
+localparam FUNCT3_SRA = 3'b101;
+localparam FUNCT3_OR = 3'b110;
+localparam FUNCT3_AND = 3'b111;
+
+localparam FUNCT3_FENCE = 3'b000;
+localparam FUNCT3_SYSTEM = 3'b000;
+
 // values selected to align with funct3 values to minimize logic to translate
 // from funct3 to alu opcode
 localparam ALU_OPCODE_ADD = 4'b0000;
@@ -119,10 +153,10 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
                 alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
 
                 case (funct3)
-                    3'b000: register_write_value = { {24{memory_value[7]}}, memory_value[7:0] }; // LB
-                    3'b001: register_write_value = { {16{memory_value[15]}}, memory_value[15:0] }; // LH
-                    3'b100: register_write_value = { 24'b0, memory_value[7:0] }; // LBU
-                    3'b101: register_write_value = { 16'b0, memory_value[15:0] }; // LHU
+                    FUNCT3_LB: register_write_value = { {24{memory_value[7]}}, memory_value[7:0] };
+                    FUNCT3_LH: register_write_value = { {16{memory_value[15]}}, memory_value[15:0] };
+                    FUNCT3_LBU: register_write_value = { 24'b0, memory_value[7:0] };
+                    FUNCT3_LHU: register_write_value = { 16'b0, memory_value[15:0] };
                     default: register_write_value = memory_value; // LW
                 endcase
             end
@@ -131,8 +165,8 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
                 alu_operand_2 = { {20{s_immediate[11]}}, s_immediate };
 
                 case (funct3)
-                    3'b000: memory_write_sections = 3'b001; // SB
-                    3'b001: memory_write_sections = 3'b011; // SH
+                    FUNCT3_SB: memory_write_sections = 3'b001;
+                    FUNCT3_SH: memory_write_sections = 3'b011;
                     default: memory_write_sections = 3'b111; // SW 
                 endcase
             end
@@ -141,8 +175,7 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
                 alu_operand_1 = register_read_value_1;
                 alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
 
-                if (funct3 == 3'b010 || funct3 == 3'b011) begin
-                    // SLTI(U)
+                if (funct3 == FUNCT3_SLT || funct3 == FUNCT3_SLTU) begin
                     comparator_opcode = { 1'b1, funct3[0], 1'b0 };
                     comparator_operand_1 = register_read_value_1;
                     comparator_operand_2 = { 20'b0, i_immediate };
@@ -157,8 +190,7 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
                 alu_operand_1 = register_read_value_1;
                 alu_operand_2 = register_read_value_2;
 
-                if (funct3 == 3'b010 || funct3 == 3'b011) begin
-                    // SLT(U)
+                if (funct3 == FUNCT3_SLT || funct3 == FUNCT3_SLTU) begin
                     comparator_opcode = { 1'b1, funct3[0], 1'b0 };
                     comparator_operand_1 = register_read_value_1;
                     comparator_operand_2 = register_read_value_2;
