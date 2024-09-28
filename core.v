@@ -63,22 +63,43 @@ module core(clk, program_counter, program_memory_value, memory_address, memory_v
     assign next_program_counter = program_counter + 4;
 
     always @* begin
-        if (opcode == JAL_OPCODE || opcode == JALR_OPCODE) begin
-            register_write_value = next_program_counter;
-        end else if ((opcode == IMMEDIATE_OPCODE || opcode == ARITHMETIC_OPCODE) && (funct3 == 3'b010 || funct3 == 3'b011)) begin
-            // SLT(I)(U)
-            register_write_value = { 31'b0, comparator_result };
-        end else if (opcode == LOAD_OPCODE) begin
-            case (funct3)
-                3'b000: register_write_value = { {24{memory_value[7]}}, memory_value[7:0] }; // LB
-                3'b001: register_write_value = { {16{memory_value[15]}}, memory_value[15:0] }; // LH
-                3'b100: register_write_value = { 24'b0, memory_value[7:0] }; // LBU
-                3'b101: register_write_value = { 16'b0, memory_value[15:0] }; // LHU
-                default: register_write_value = memory_value; // LW
-            endcase
-        end else begin
-            register_write_value = alu_result;
-        end
+        register_write_value = 32'bx;
+
+        case(opcode)
+            JAL_OPCODE: begin
+                register_write_value = next_program_counter;
+            end
+            JALR_OPCODE: begin
+                register_write_value = next_program_counter;
+            end
+            LOAD_OPCODE: begin
+                case (funct3)
+                    3'b000: register_write_value = { {24{memory_value[7]}}, memory_value[7:0] }; // LB
+                    3'b001: register_write_value = { {16{memory_value[15]}}, memory_value[15:0] }; // LH
+                    3'b100: register_write_value = { 24'b0, memory_value[7:0] }; // LBU
+                    3'b101: register_write_value = { 16'b0, memory_value[15:0] }; // LHU
+                    default: register_write_value = memory_value; // LW
+                endcase
+            end
+            IMMEDIATE_OPCODE: begin
+                if (funct3 == 3'b010 || funct3 == 3'b011) begin
+                    // SLTI(U)
+                    register_write_value = { 31'b0, comparator_result };
+                end else begin
+                    register_write_value = alu_result;
+                end
+            end
+            ARITHMETIC_OPCODE: begin
+                if (funct3 == 3'b010 || funct3 == 3'b011) begin
+                    // SLT(U)
+                    register_write_value = { 31'b0, comparator_result };
+                end else begin
+                    register_write_value = alu_result;
+                end
+            end
+            // to avoid a synthesizer warning for incomplete case
+            default: begin end
+        endcase
     end
 
     always @(posedge clk) begin
