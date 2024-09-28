@@ -12,6 +12,17 @@ localparam ARITHMETIC_OPCODE = 5'b01100;
 localparam FENCE_OPCODE = 5'b00011; // includes PAUSE instruction
 localparam SYSTEM_OPCODE = 5'b11100;
 
+// values selected to align with funct3 values to minimize logic to translate
+// from funct3 to alu opcode
+localparam ALU_OPCODE_ADD = 4'b0000;
+localparam ALU_OPCODE_SUBTRACT = 4'b1000;
+localparam ALU_OPCODE_LEFT_SHIFT = 4'b0001;
+localparam ALU_OPCODE_XOR = 4'b0100;
+localparam ALU_OPCODE_RIGHT_SHIFT_LOGICAL = 4'b0101;
+localparam ALU_OPCODE_RIGHT_SHIFT_ARITHMETIC = 4'b1101;
+localparam ALU_OPCODE_OR = 4'b0110;
+localparam ALU_OPCODE_AND = 4'b0111;
+
 module core(clk, program_counter, program_memory_value, memory_address, memory_value, memory_write_sections);
 
     input clk;
