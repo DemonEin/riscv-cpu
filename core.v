@@ -84,6 +84,10 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
     reg [3:0] alu_opcode;
     reg [2:0] comparator_opcode;
 
+    `ifdef simulation
+        reg error;
+    `endif
+
     registers registers(clock, register_write_address, register_write_value, register_read_address_1, register_read_value_1, register_read_address_2, register_read_value_2);
     alu alu(alu_opcode, alu_operand_1, alu_operand_2, alu_result);
     comparator comparator(comparator_opcode, comparator_operand_1, comparator_operand_2, comparator_result);
@@ -232,6 +236,16 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
                     register_write_value = alu_result;
                 end
             end
+            SYSTEM_OPCODE: begin
+                if (instruction[20] == 0) begin
+                    // ECALL
+                end else begin
+                    // EBREAK
+                    `ifdef simulation
+                        error = 1'b1;
+                    `endif
+                end
+            end
             // to avoid a synthesizer warning for incomplete case
             default: begin end
         endcase
@@ -241,16 +255,12 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
         program_counter = next_program_counter;
     end
 
-    /*
-    initial begin
-        while (1) begin
-            // #2 $display("alu1: %0h, alu2: %0h", alu_operand_1, alu_operand_2);
-            // $display("alu_result: %0d", alu_result);
-            // #2 $display("opcode: %0h", opcode);
-            // $display("i_immediate: %0h", i_immediate);
-            #2;
-            // #2 $display("instruction: %0h bit 31: ", instruction, instruction[31]);
+    `ifdef simulation
+        always @* begin
+            if (error) begin
+                $stop;
+            end
         end
-    end
-    */
+    `endif
+
 endmodule
