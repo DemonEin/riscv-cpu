@@ -1,3 +1,5 @@
+localparam PROGRAM_MEMORY_SIZE = 1000;
+
 module tb_core;
     reg clock;
 
@@ -5,7 +7,8 @@ module tb_core;
     reg [31:0] memory_value, program_counter;
     wire [2:0] memory_write_sections;
 
-    reg [7:0] program_memory[1000:0], memory[];
+    reg [7:0] program_memory[PROGRAM_MEMORY_SIZE - 1:0];
+    reg [7:0] memory[];
 
     reg file;
 
@@ -32,12 +35,23 @@ module tb_core;
     assign program_memory_value = { program_memory[program_counter + 3], program_memory[program_counter + 2], program_memory[program_counter + 1], program_memory[program_counter] };
 
     initial begin
-        $readmemh("dump.o", program_memory);
-        // $monitor("%0h", memory_address);
-        $monitor("%0h", program_counter);
-        // file = $fopen("test.o", "w");
-        #100
-        // #100 $display(memory[0]);
-        $finish;
+        reg [31:0] memory_image_file;
+        reg [31:0] read_result;
+        memory_image_file = $fopen("memory_image", "r");
+        if (memory_image_file == 0) begin
+            $display("could not open memory image file");
+            $stop;
+        end
+        read_result = $fread(program_memory, memory_image_file);
+        if (read_result == 0) begin
+            $display("could not read memory image file");
+            $stop;
+        end
+        if (read_result == PROGRAM_MEMORY_SIZE) begin
+            // BUG: this can be hit when there is exactly enough memory to fit
+            // the memory image, but it's close enough
+            $display("memory image too big to fit in program memory");
+            $stop;
+        end
     end
 endmodule
