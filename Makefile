@@ -1,11 +1,17 @@
-.PHONY: sim
-sim: build_simulation
-	obj_dir/Vtb_core
+build_directory = build
 
-.PHONY: build_simulation
-build_simulation:
+VPATH = $(build_directory)
+
+.PHONY: sim
+sim: verilator/Vtb_core
+	$(build_directory)/$<
+
+verilator/Vtb_core: $(build_directory)
 	@# TODO consider using -Wall
-	verilator +1364-2005ext+v +define+simulation --binary -j 0 tb_core.v
+	verilator +1364-2005ext+v +define+simulation --binary -j 0 tb_core.v -Mdir $(build_directory)/verilator
+
+$(build_directory):
+	mkdir $(build_directory)
 
 .PHONY: synth
 synth:
@@ -13,4 +19,4 @@ synth:
 
 .PHONY: clean
 clean:
-	rm -rf obj_dir
+	rm -rf $(build_directory)
