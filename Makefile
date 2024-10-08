@@ -1,12 +1,12 @@
 needed_verilog_files = top.v core.v comparator.v alu.v registers.v
 
 .PHONY: sim
-sim: target/verilator/Vtb_core
+sim: target/verilator/Vtb_top
 	$<
 
-target/verilator/Vtb_core: | target
+target/verilator/Vtb_top: tb_top.v target/memory.hex $(needed_verilog_files) | target
 	@# TODO consider using -Wall
-	verilator +1364-2005ext+v +define+simulation --binary -j 0 tb_core.v -Mdir $(@D)
+	verilator +1364-2005ext+v +define+simulation --binary -j 0 $< -Mdir $(@D)
 
 target:
 	mkdir target
