@@ -63,6 +63,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
     input [31:0] program_memory_value;
 
     output reg [31:0] program_counter; 
+    initial program_counter = 0;
     // MSB 1 means write high half-word, middle bit 1 means write low
     // half-word high byte, LSB means write low byte
     // all zeros means read
