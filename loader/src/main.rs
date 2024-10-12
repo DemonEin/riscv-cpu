@@ -1,34 +1,51 @@
 /* This program takes an ELF binary and generates data suitable for loading
  * onto the processor
  *
- * Output format:
- *     bytes 0-3: initial value of program counter
- *     bytes 4+: initial memory image, what the ELF file expects to have in
- *               memory
+ * ouputs files:
+ *     memory_image: the initial memory image of the processor
+ *     entry_point: the initial value of the program counter
  */
 
-use std::io::Read;
+use std::fs::File;
 use std::io::Write;
 
+use clap::Parser;
+
+use elf::abi::PT_LOAD;
 use elf::endian::LittleEndian;
 use elf::ElfBytes;
-use elf::abi::PT_LOAD;
+
+#[derive(Parser)]
+struct Args {
+    /// input ELF file
+    elf: String,
+    /// path of the memory image output file
+    #[arg(short = 'o', long = "memory")]
+    memory_image: String,
+    /// path of the entry point ouptup file
+    #[arg(long = "entry")]
+    entry_point: String,
+}
 
 fn main() {
-    let mut file_data = Vec::new();
-    std::io::stdin().lock().read_to_end(&mut file_data).unwrap();
+    let args = Args::parse();
+
+    let file_data = std::fs::read(args.elf).unwrap();
     let elf = ElfBytes::<LittleEndian>::minimal_parse(&file_data).unwrap();
     let elf_header = elf.ehdr;
 
-    let mut stdout = std::io::stdout().lock();
-
+    let mut entry_point_file = File::create(args.entry_point).unwrap();
     let entry_address: u32 = elf_header.e_entry.try_into().unwrap();
-    stdout.write(entry_address.to_le_bytes().as_slice()).unwrap();
+    entry_point_file
+        .write(entry_address.to_le_bytes().as_slice())
+        .unwrap();
+    drop(entry_point_file);
 
+    let mut memory_image_file = File::create(args.memory_image).unwrap();
     let mut memory_offset: u32 = 0;
 
     let mut write = |bytes: &[u8], offset: &mut u32| {
-        stdout.write_all(bytes).unwrap();
+        memory_image_file.write_all(bytes).unwrap();
         *offset += u32::try_from(std::mem::size_of_val(bytes)).unwrap();
     };
 
