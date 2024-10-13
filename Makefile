@@ -46,3 +46,11 @@ install: target/cpu.dfu
 .PHONY: clean
 clean:
 	rm -rf target
+
+.PHONY: readelf
+readelf: target/a.out
+	readelf -a $<
+
+.PHONY: disassemble
+objdump: target/a.out
+	$(gcc_binary_prefix)objdump -D $<
