@@ -37,7 +37,7 @@ fn main() {
     let mut entry_point_file = File::create(args.entry_point).unwrap();
     let entry_address: u32 = elf_header.e_entry.try_into().unwrap();
     entry_point_file
-        .write(entry_address.to_le_bytes().as_slice())
+        .write(entry_address.to_string().as_bytes())
         .unwrap();
     drop(entry_point_file);
 

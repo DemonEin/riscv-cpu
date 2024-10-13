@@ -1,4 +1,4 @@
-localparam PROGRAM_MEMORY_SIZE = 1000;
+localparam PROGRAM_MEMORY_SIZE = 32'h1000;
 
 module top(
     input clk48,

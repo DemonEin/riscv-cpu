@@ -1,0 +1,5 @@
+MEMORY {
+    sram (wx) : ORIGIN = 0, LENGTH = 0x1000
+}
+
+ENTRY(_start)
