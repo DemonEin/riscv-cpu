@@ -1,4 +1,5 @@
 needed_verilog_files = top.v core.v comparator.v alu.v registers.v
+asm_file = blink.s
 
 .PHONY: sim
 sim: target/verilator/Vtb_top
@@ -11,7 +12,13 @@ target/verilator/Vtb_top: tb_top.v target/memory.hex $(needed_verilog_files) | t
 target:
 	mkdir target
 
-target/cpu.json: $(needed_verilog_files) | target
+target/memory.bin: $(asm_file) | target
+	if ! ../riscv_as/a.out $< > $@; then rm $@; false ; fi
+
+target/memory.hex: target/memory.bin | target
+	hexdump -v -e '/1 "%x "' $< > $@
+
+target/cpu.json: $(needed_verilog_files) target/memory.hex | target
 	yosys -p "read_verilog $(needed_verilog_files); synth_ecp5 -json $@"
 
 target/cpu.config: target/cpu.json orangecrab.lpf
