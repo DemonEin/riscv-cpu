@@ -73,8 +73,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
     inout [31:0] memory_value;
 
     wire [31:0] instruction, alu_result, memory_read_value, next_instruction_address, register_read_value_1, register_read_value_2;
-    wire [19:0] u_immediate, j_immediate;
-    wire [11:0] i_immediate, s_immediate, b_immediate;
+    wire [31:0] i_immediate, s_immediate, b_immediate, u_immediate, j_immediate;
     wire [4:0] opcode;
     wire [4:0] register_read_address_1, register_read_address_2, rd;
     wire [2:0] funct3;
@@ -96,11 +95,11 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
     assign instruction = program_memory_value;
     assign opcode = instruction[6:2];
 
-    assign i_immediate = instruction[31:20];
-    assign s_immediate = { instruction[31:25], instruction[11:7] };
-    assign b_immediate = { instruction[31], instruction[7], instruction[30:25], instruction[11:8] };
-    assign u_immediate = instruction[31:12];
-    assign j_immediate = { instruction[31], instruction[19:12], instruction[20], instruction[30:21] };
+    assign i_immediate = { {21{instruction[31]}}, instruction[30:20] };
+    assign s_immediate = { {21{instruction[31]}}, instruction[30:25], instruction[11:7] };
+    assign b_immediate = { {20{instruction[31]}}, instruction[7], instruction[30:25], instruction[11:8], 1'b0 };
+    assign u_immediate = { instruction[31:12], 12'b0 };
+    assign j_immediate = { {12{instruction[31]}}, instruction[19:12], instruction[20], instruction[30:21], 1'b0 };
 
     assign funct3 = instruction[14:12];
 
@@ -132,7 +131,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
             LUI_OPCODE: begin
                 alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = 0;
-                alu_operand_2 = { u_immediate, 12'b0 };
+                alu_operand_2 = u_immediate;
 
                 register_write_address = rd;
                 register_write_value = alu_result;
@@ -140,7 +139,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
             AUIPC_OPCODE: begin
                 alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = program_counter;
-                alu_operand_2 = { u_immediate, 12'b0 };
+                alu_operand_2 = u_immediate;
 
                 register_write_address = rd;
                 register_write_value = alu_result;
@@ -148,7 +147,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
             JAL_OPCODE: begin
                 alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = program_counter;
-                alu_operand_2 = { {11{j_immediate[19]}}, j_immediate, 1'b0 };
+                alu_operand_2 = j_immediate;
                 next_program_counter = alu_result;
 
                 register_write_address = rd;
@@ -157,7 +156,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
             JALR_OPCODE: begin
                 alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = register_read_value_1;
-                alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
+                alu_operand_2 = i_immediate;
                 next_program_counter = { alu_result[31:1], 1'b0 };
 
                 register_write_address = rd;
@@ -170,7 +169,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
 
                 alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = program_counter;
-                alu_operand_2 = { {19{b_immediate[11]}}, b_immediate, 1'b0 };
+                alu_operand_2 = b_immediate;
 
                 if (comparator_result) begin
                     next_program_counter = alu_result;
@@ -179,7 +178,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
             LOAD_OPCODE: begin
                 alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = register_read_value_1;
-                alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
+                alu_operand_2 = i_immediate;
 
                 register_write_address = rd;
                 case (funct3)
@@ -193,7 +192,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
             STORE_OPCODE: begin
                 alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = program_counter;
-                alu_operand_2 = { {20{s_immediate[11]}}, s_immediate };
+                alu_operand_2 = s_immediate;
 
                 case (funct3)
                     FUNCT3_SB: memory_write_sections = 3'b001;
@@ -208,13 +207,13 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
                     alu_opcode = { 1'b0, funct3 };
                 end
                 alu_operand_1 = register_read_value_1;
-                alu_operand_2 = { {20{i_immediate[11]}}, i_immediate };
+                alu_operand_2 = i_immediate;
 
                 register_write_address = rd;
                 if (funct3 == FUNCT3_SLT || funct3 == FUNCT3_SLTU) begin
                     comparator_opcode = { 1'b1, funct3[0], 1'b0 };
                     comparator_operand_1 = register_read_value_1;
-                    comparator_operand_2 = { 20'b0, i_immediate };
+                    comparator_operand_2 = i_immediate;
 
                     register_write_value = { 31'b0, comparator_result };
                 end else begin
