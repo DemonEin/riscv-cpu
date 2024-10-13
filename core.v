@@ -1,16 +1,16 @@
 // opcodes, using only the five bits that disambiguate them
 // (the low two bits are always 11)
-localparam LUI_OPCODE = 5'b01101;
-localparam AUIPC_OPCODE = 5'b00101;
-localparam JAL_OPCODE = 5'b11011;
-localparam JALR_OPCODE = 5'b11001;
-localparam BRANCH_OPCODE = 5'b11000;
-localparam LOAD_OPCODE = 5'b00000;
-localparam STORE_OPCODE = 5'b01000;
-localparam IMMEDIATE_OPCODE = 5'b00100;
-localparam ARITHMETIC_OPCODE = 5'b01100;
-localparam FENCE_OPCODE = 5'b00011; // includes PAUSE instruction
-localparam SYSTEM_OPCODE = 5'b11100;
+localparam OPCODE_LUI = 5'b01101;
+localparam OPCODE_AUIPC = 5'b00101;
+localparam OPCODE_JAL = 5'b11011;
+localparam OPCODE_JALR = 5'b11001;
+localparam OPCODE_BRANCH = 5'b11000;
+localparam OPCODE_LOAD = 5'b00000;
+localparam OPCODE_STORE = 5'b01000;
+localparam OPCODE_IMMEDIATE = 5'b00100;
+localparam OPCODE_ARITHMETIC = 5'b01100;
+localparam OPCODE_FENCE = 5'b00011; // includes PAUSE instruction
+localparam OPCODE_SYSTEM = 5'b11100;
 
 localparam FUNCT3_JALR = 3'b000;
 
@@ -107,7 +107,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
     assign register_read_address_2 = instruction[24:20];
     assign rd = instruction[11:7];
 
-    assign memory_value = (opcode == STORE_OPCODE) ? register_read_value_2 : 0;
+    assign memory_value = (opcode == OPCODE_STORE) ? register_read_value_2 : 0;
     assign memory_address = alu_result;
 
     assign next_instruction_address = program_counter + 4;
@@ -128,7 +128,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
         next_program_counter = next_instruction_address;
 
         case(opcode)
-            LUI_OPCODE: begin
+            OPCODE_LUI: begin
                 alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = 0;
                 alu_operand_2 = u_immediate;
@@ -136,7 +136,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
                 register_write_address = rd;
                 register_write_value = alu_result;
             end
-            AUIPC_OPCODE: begin
+            OPCODE_AUIPC: begin
                 alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = program_counter;
                 alu_operand_2 = u_immediate;
@@ -144,7 +144,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
                 register_write_address = rd;
                 register_write_value = alu_result;
             end
-            JAL_OPCODE: begin
+            OPCODE_JAL: begin
                 alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = program_counter;
                 alu_operand_2 = j_immediate;
@@ -153,7 +153,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
                 register_write_address = rd;
                 register_write_value = next_instruction_address;
             end
-            JALR_OPCODE: begin
+            OPCODE_JALR: begin
                 alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = register_read_value_1;
                 alu_operand_2 = i_immediate;
@@ -162,7 +162,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
                 register_write_address = rd;
                 register_write_value = next_instruction_address;
             end
-            BRANCH_OPCODE: begin
+            OPCODE_BRANCH: begin
                 comparator_opcode = funct3;
                 comparator_operand_1 = register_read_value_1;
                 comparator_operand_2 = register_read_value_2;
@@ -175,7 +175,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
                     next_program_counter = alu_result;
                 end
             end
-            LOAD_OPCODE: begin
+            OPCODE_LOAD: begin
                 alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = register_read_value_1;
                 alu_operand_2 = i_immediate;
@@ -189,7 +189,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
                     default: register_write_value = memory_value; // LW
                 endcase
             end
-            STORE_OPCODE: begin
+            OPCODE_STORE: begin
                 alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = program_counter;
                 alu_operand_2 = s_immediate;
@@ -200,7 +200,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
                     default: memory_write_sections = 3'b111; // SW 
                 endcase
             end
-            IMMEDIATE_OPCODE: begin
+            OPCODE_IMMEDIATE: begin
                 if (funct3 == FUNCT3_SLL || funct3 == FUNCT3_SRL || funct3 == FUNCT3_SRA) begin
                     alu_opcode = { instruction[30], funct3 };
                 end else begin
@@ -220,7 +220,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
                     register_write_value = alu_result;
                 end
             end
-            ARITHMETIC_OPCODE: begin
+            OPCODE_ARITHMETIC: begin
                 alu_opcode = { instruction[30], funct3 };
                 alu_operand_1 = register_read_value_1;
                 alu_operand_2 = register_read_value_2;
@@ -236,7 +236,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
                     register_write_value = alu_result;
                 end
             end
-            SYSTEM_OPCODE: begin
+            OPCODE_SYSTEM: begin
                 if (instruction[20] == 0) begin
                     // ECALL
                 end else begin
