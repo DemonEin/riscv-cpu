@@ -11,7 +11,7 @@ sim: target/verilator/Vtb_top
 
 target/verilator/Vtb_top: tb_top.v target/memory.hex target/entry.txt $(needed_verilog_files) | target
 	@# TODO consider using -Wall
-	verilator +1364-2005ext+v +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat target/entry.txt) --binary -j 0 $< -Mdir $(@D)
+	verilator +1364-2005ext+v +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat target/entry.txt) --binary -j 0 $(needed_verilog_files) -Mdir $(@D)
 
 target:
 	mkdir target
@@ -27,7 +27,10 @@ target/memory.hex: target/memory.bin | target
 	hexdump -v -e '/1 "%x "' $< > $@
 
 target/cpu.json: $(needed_verilog_files) target/memory.hex target/entry.txt | target
-	yosys -p "read_verilog -DINITIAL_PROGRAM_COUNTER=$$(cat target/entry.txt) $(needed_verilog_files); synth_ecp5 -json $@"
+	@# run verilator --lint-only before building because yosys does not report many simple errors
+	INITIAL_PROGRAM_COUNTER=$$(cat target/entry.txt) && \
+	verilator +1364-2005ext+v --lint-only +define+INITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER $(needed_verilog_files) && \
+	yosys -p "read_verilog -DINITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER $(needed_verilog_files); synth_ecp5 -json $@"
 
 target/cpu.config: target/cpu.json orangecrab.lpf
 	nextpnr-ecp5 --85k --package CSFBGA285 --lpf orangecrab.lpf --json $< --textcfg $@
