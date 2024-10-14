@@ -29,6 +29,7 @@ localparam FUNCT3_LHU = 3'b101;
 
 localparam FUNCT3_SB = 3'b000;
 localparam FUNCT3_SH = 3'b001;
+localparam FUNCT3_SW = 3'b010;
 
 // funct3 values for arithmetic and immediate instructions are the same,
 // so use the same for both
@@ -62,15 +63,14 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
     input clock;
     input [31:0] program_memory_value;
 
-    output reg [31:0] program_counter; 
+    output reg [31:0] program_counter, memory_address;
     initial program_counter = `INITIAL_PROGRAM_COUNTER;
     // MSB 1 means write high half-word, middle bit 1 means write low
     // half-word high byte, LSB means write low byte
     // all zeros means read
     output reg [2:0] memory_write_sections;
-    output [31:0] memory_address;
 
-    inout [31:0] memory_value;
+    inout reg [31:0] memory_value;
 
     wire [31:0] instruction, alu_result, memory_read_value, next_instruction_address, register_read_value_1, register_read_value_2;
     wire [31:0] i_immediate, s_immediate, b_immediate, u_immediate, j_immediate;
@@ -107,9 +107,6 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
     assign register_read_address_2 = instruction[24:20];
     assign rd = instruction[11:7];
 
-    assign memory_value = (opcode == OPCODE_STORE) ? register_read_value_2 : 0;
-    assign memory_address = alu_result;
-
     assign next_instruction_address = program_counter + 4;
 
     always @* begin
@@ -123,7 +120,9 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
 
         register_write_address = 5'b0;
         register_write_value = 32'bx;
+        memory_address = 32'bx;
         memory_write_sections = 0;
+        memory_value = 32'bx;
 
         next_program_counter = next_instruction_address;
 
@@ -179,25 +178,30 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
                 alu_opcode = ALU_OPCODE_ADD;
                 alu_operand_1 = register_read_value_1;
                 alu_operand_2 = i_immediate;
+                memory_address = alu_result;
 
                 register_write_address = rd;
                 case (funct3)
-                    FUNCT3_LB: register_write_value = { {24{memory_value[7]}}, memory_value[7:0] };
+                    FUNCT3_LW: register_write_value = memory_value;
                     FUNCT3_LH: register_write_value = { {16{memory_value[15]}}, memory_value[15:0] };
-                    FUNCT3_LBU: register_write_value = { 24'b0, memory_value[7:0] };
                     FUNCT3_LHU: register_write_value = { 16'b0, memory_value[15:0] };
-                    default: register_write_value = memory_value; // LW
+                    FUNCT3_LB: register_write_value = { {24{memory_value[7]}}, memory_value[7:0] };
+                    FUNCT3_LBU: register_write_value = { 24'b0, memory_value[7:0] };
+                    default: register_write_value = 32'bx;
                 endcase
             end
             OPCODE_STORE: begin
                 alu_opcode = ALU_OPCODE_ADD;
-                alu_operand_1 = program_counter;
+                alu_operand_1 = register_read_value_1;
                 alu_operand_2 = s_immediate;
+                memory_address = alu_result;
+                memory_value = register_read_value_2;
 
                 case (funct3)
-                    FUNCT3_SB: memory_write_sections = 3'b001;
+                    FUNCT3_SW: memory_write_sections = 3'b111;
                     FUNCT3_SH: memory_write_sections = 3'b011;
-                    default: memory_write_sections = 3'b111; // SW 
+                    FUNCT3_SB: memory_write_sections = 3'b001;
+                    default: memory_write_sections = 3'bx;
                 endcase
             end
             OPCODE_IMMEDIATE: begin
