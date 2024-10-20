@@ -85,6 +85,7 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
     reg [2:0] comparator_opcode;
 
     `ifdef simulation
+        reg finish;
         reg error;
     `endif
 
@@ -243,6 +244,9 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
             OPCODE_SYSTEM: begin
                 if (instruction[20] == 0) begin
                     // ECALL
+                    `ifdef simulation
+                        finish = 1;
+                    `endif
                 end else begin
                     // EBREAK
                     `ifdef simulation
@@ -260,6 +264,12 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
     end
 
     `ifdef simulation
+        always @* begin
+            if (finish) begin
+                $finish;
+            end
+        end
+
         always @* begin
             if (error) begin
                 $stop;
