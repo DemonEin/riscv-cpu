@@ -18,7 +18,7 @@ module top(
 
     core core(clk48, program_counter, program_memory_value, memory_address, memory_value, memory_write_sections);
 
-    initial $readmemh("target/memory.hex", program_memory);
+    initial $readmemh(`MEMORY_FILE, program_memory);
 
     assign rgb_led0_r = ~led_on;
     assign rgb_led0_g = ~led_on;

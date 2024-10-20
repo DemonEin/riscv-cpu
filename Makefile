@@ -3,48 +3,55 @@
 gcc_binary_prefix = ~/riscv-gcc/bin/riscv32-elf-
 
 needed_verilog_files = top.v core.v comparator.v alu.v registers.v
-program_files = blink.s blink.c
 
-.PHONY: sim
-sim: target/verilator/Vtb_top
-	$<
-
-target/verilator/Vtb_top: tb_top.v target/memory.hex target/entry.txt $(needed_verilog_files) | target
+%/verilator/Vtb_top: tb_top.v %/memory.hex %/entry.txt $(needed_verilog_files)
 	@# TODO consider using -Wall
-	verilator +1364-2005ext+v +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat target/entry.txt) --binary -j 0 $(needed_verilog_files) -Mdir $(@D)
+	verilator +1364-2005ext+v +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) +define+MEMORY_FILE=\"$*/memory.hex\" --binary -j 0 tb_top.v $(needed_verilog_files) -Mdir $(@D)
 
-target:
-	mkdir target
-
-target/a.out: $(program_files) linker-script | target
+%/a.out: $(program_files) linker-script | %
 	$(gcc_binary_prefix)gcc -march=rv32i -mabi=ilp32 -T linker-script -nostdlib -o $@ $(program_files)
 
-target/memory.bin target/entry.txt &: target/a.out | target
+%/memory.bin %/entry.txt &: %/a.out
 	cargo run --manifest-path loader/Cargo.toml -- \
-		--memory target/memory.bin --entry target/entry.txt target/a.out
+		--memory $*/memory.bin --entry $*/entry.txt $<
 
-target/memory.hex: target/memory.bin | target
+%.hex: %.bin
 	hexdump -v -e '/1 "%x "' $< > $@
 
-target/cpu.json: $(needed_verilog_files) target/memory.hex target/entry.txt | target
-	@# run verilator --lint-only before building because yosys does not report many simple errors
-	INITIAL_PROGRAM_COUNTER=$$(cat target/entry.txt) && \
-	verilator +1364-2005ext+v --lint-only +define+INITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER $(needed_verilog_files) && \
-	yosys -p "read_verilog -DINITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER $(needed_verilog_files); synth_ecp5 -json $@"
+$(target_directory):
+	mkdir -p $@
 
-target/cpu.config: target/cpu.json orangecrab.lpf
+%/cpu.json: $(needed_verilog_files) %/memory.hex %/entry.txt
+	@# run verilator --lint-only before building because yosys does not report many simple errors
+	INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) && \
+	verilator +1364-2005ext+v --lint-only +define+INITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER +define+MEMORY_FILE='"$*/memory.hex"' $(needed_verilog_files) && \
+	yosys -p "read_verilog -DINITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER -DMEMORY_FILE=\"$*/memory.hex\" $(needed_verilog_files); synth_ecp5 -json $@"
+
+%.config: %.json orangecrab.lpf
 	nextpnr-ecp5 --85k --package CSFBGA285 --lpf orangecrab.lpf --json $< --textcfg $@
 
-target/cpu.bit: target/cpu.config
+%.bit: %.config
 	ecppack --compress --freq 38.8 --input $< --bit $@
 
-target/cpu.dfu: target/cpu.bit
+%.dfu: %.bit
 	cp $< $@
 	dfu-suffix -v 1209 -p 5af0 --add $@
 
 .PHONY: install
-install: target/cpu.dfu
+install: $(target_directory)/cpu.dfu
 	dfu-util --alt 0 -D $<
+
+.PHONY: sim
+sim: $(target_directory)/verilator/Vtb_top
+	$<
+
+.PHONY: test
+test:
+	make sim target_directory=target/test program_files=test.s
+
+.PHONY: blinkinstall
+blinkinstall:
+	make install target_directory=target/blink program_files="blink.s blink.c"
 
 .PHONY: clean
 clean:
