@@ -78,9 +78,9 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     wire [2:0] funct3;
     wire comparator_result;
 
-    reg [31:0] program_counter, register_write_value, alu_operand_1, alu_operand_2, comparator_operand_1, comparator_operand_2;
+    reg [31:0] program_counter, register_write_value_1, register_write_value_2, alu_operand_1, alu_operand_2, comparator_operand_1, comparator_operand_2;
     initial program_counter = `INITIAL_PROGRAM_COUNTER;
-    reg [4:0] register_write_address;
+    reg [4:0] register_write_address_1, register_write_address_2;
     reg [3:0] alu_opcode;
     reg [2:0] comparator_opcode;
 
@@ -91,7 +91,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         reg error;
     `endif
 
-    registers registers(clock, register_write_address, register_write_value, register_read_address_1, register_read_value_1, register_read_address_2, register_read_value_2);
+    registers registers(clock, register_write_address_1, register_write_value_1, register_write_address_2, register_write_value_2, register_read_address_1, register_read_value_1, register_read_address_2, register_read_value_2);
     alu alu(alu_opcode, alu_operand_1, alu_operand_2, alu_result);
     comparator comparator(comparator_opcode, comparator_operand_1, comparator_operand_2, comparator_result);
 
@@ -121,8 +121,10 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         alu_operand_1 = 32'bx;
         alu_operand_2 = 32'bx;
 
-        register_write_address = 5'b0;
-        register_write_value = 32'bx;
+        register_write_address_1 = 5'b0;
+        register_write_value_1 = 32'bx;
+        register_write_address_2 = 5'b0;
+        register_write_value_2 = 32'bx;
         memory_address = 32'bx;
         memory_write_sections = 0;
         memory_value = 32'bx;
@@ -138,16 +140,16 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                     alu_operand_1 = 0;
                     alu_operand_2 = u_immediate;
 
-                    register_write_address = rd;
-                    register_write_value = alu_result;
+                    register_write_address_1 = rd;
+                    register_write_value_1 = alu_result;
                 end
                 OPCODE_AUIPC: begin
                     alu_opcode = ALU_OPCODE_ADD;
                     alu_operand_1 = program_counter;
                     alu_operand_2 = u_immediate;
 
-                    register_write_address = rd;
-                    register_write_value = alu_result;
+                    register_write_address_1 = rd;
+                    register_write_value_1 = alu_result;
                 end
                 OPCODE_JAL: begin
                     alu_opcode = ALU_OPCODE_ADD;
@@ -155,8 +157,8 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                     alu_operand_2 = j_immediate;
                     next_program_counter = alu_result;
 
-                    register_write_address = rd;
-                    register_write_value = next_instruction_address;
+                    register_write_address_1 = rd;
+                    register_write_value_1 = next_instruction_address;
                 end
                 OPCODE_JALR: begin
                     alu_opcode = ALU_OPCODE_ADD;
@@ -164,8 +166,8 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                     alu_operand_2 = i_immediate;
                     next_program_counter = { alu_result[31:1], 1'b0 };
 
-                    register_write_address = rd;
-                    register_write_value = next_instruction_address;
+                    register_write_address_1 = rd;
+                    register_write_value_1 = next_instruction_address;
                 end
                 OPCODE_BRANCH: begin
                     comparator_opcode = funct3;
@@ -186,14 +188,14 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                     alu_operand_2 = i_immediate;
                     memory_address = alu_result;
 
-                    register_write_address = rd;
+                    register_write_address_1 = rd;
                     case (funct3)
-                        FUNCT3_LW: register_write_value = memory_value;
-                        FUNCT3_LH: register_write_value = { {16{memory_value[15]}}, memory_value[15:0] };
-                        FUNCT3_LHU: register_write_value = { 16'b0, memory_value[15:0] };
-                        FUNCT3_LB: register_write_value = { {24{memory_value[7]}}, memory_value[7:0] };
-                        FUNCT3_LBU: register_write_value = { 24'b0, memory_value[7:0] };
-                        default: register_write_value = 32'bx;
+                        FUNCT3_LW: register_write_value_1 = memory_value;
+                        FUNCT3_LH: register_write_value_1 = { {16{memory_value[15]}}, memory_value[15:0] };
+                        FUNCT3_LHU: register_write_value_1 = { 16'b0, memory_value[15:0] };
+                        FUNCT3_LB: register_write_value_1 = { {24{memory_value[7]}}, memory_value[7:0] };
+                        FUNCT3_LBU: register_write_value_1 = { 24'b0, memory_value[7:0] };
+                        default: register_write_value_1 = 32'bx;
                     endcase
                 end
                 OPCODE_STORE: begin
@@ -219,15 +221,15 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                     alu_operand_1 = register_read_value_1;
                     alu_operand_2 = i_immediate;
 
-                    register_write_address = rd;
+                    register_write_address_1 = rd;
                     if (funct3 == FUNCT3_SLT || funct3 == FUNCT3_SLTU) begin
                         comparator_opcode = { 1'b1, funct3[0], 1'b0 };
                         comparator_operand_1 = register_read_value_1;
                         comparator_operand_2 = i_immediate;
 
-                        register_write_value = { 31'b0, comparator_result };
+                        register_write_value_1 = { 31'b0, comparator_result };
                     end else begin
-                        register_write_value = alu_result;
+                        register_write_value_1 = alu_result;
                     end
                 end
                 OPCODE_ARITHMETIC: begin
@@ -235,15 +237,15 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                     alu_operand_1 = register_read_value_1;
                     alu_operand_2 = register_read_value_2;
 
-                    register_write_address = rd;
+                    register_write_address_1 = rd;
                     if (funct3 == FUNCT3_SLT || funct3 == FUNCT3_SLTU) begin
                         comparator_opcode = { 1'b1, funct3[0], 1'b0 };
                         comparator_operand_1 = register_read_value_1;
                         comparator_operand_2 = register_read_value_2;
 
-                        register_write_value = { 31'b0, comparator_result };
+                        register_write_value_1 = { 31'b0, comparator_result };
                     end else begin
-                        register_write_value = alu_result;
+                        register_write_value_1 = alu_result;
                     end
                 end
                 OPCODE_SYSTEM: begin
