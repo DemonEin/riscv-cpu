@@ -58,13 +58,12 @@ localparam ALU_OPCODE_RIGHT_SHIFT_ARITHMETIC = { 1'b1, FUNCT3_SRA };
 localparam ALU_OPCODE_OR = { 1'b0, FUNCT3_OR };
 localparam ALU_OPCODE_AND = { 1'b0, FUNCT3_AND };
 
-module core(clock, program_counter, program_memory_value, memory_address, memory_value, memory_write_sections);
+module core(clock, next_program_counter, program_memory_value, memory_address, memory_value, memory_write_sections);
 
     input clock;
     input [31:0] program_memory_value;
 
-    output reg [31:0] program_counter, memory_address;
-    initial program_counter = `INITIAL_PROGRAM_COUNTER;
+    output reg [31:0] next_program_counter, memory_address;
     // MSB 1 means write high half-word, middle bit 1 means write low
     // half-word high byte, LSB means write low byte
     // all zeros means read
@@ -79,10 +78,13 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
     wire [2:0] funct3;
     wire comparator_result;
 
-    reg [31:0] next_program_counter, register_write_value, alu_operand_1, alu_operand_2, comparator_operand_1, comparator_operand_2;
+    reg [31:0] program_counter, register_write_value, alu_operand_1, alu_operand_2, comparator_operand_1, comparator_operand_2;
+    initial program_counter = `INITIAL_PROGRAM_COUNTER;
     reg [4:0] register_write_address;
     reg [3:0] alu_opcode;
     reg [2:0] comparator_opcode;
+
+    reg stall = 1;
 
     `ifdef simulation
         reg finish;
@@ -125,142 +127,147 @@ module core(clock, program_counter, program_memory_value, memory_address, memory
         memory_write_sections = 0;
         memory_value = 32'bx;
 
-        next_program_counter = next_instruction_address;
+        next_program_counter = program_counter;
 
-        case(opcode)
-            OPCODE_LUI: begin
-                alu_opcode = ALU_OPCODE_ADD;
-                alu_operand_1 = 0;
-                alu_operand_2 = u_immediate;
+        if (!stall) begin
+            next_program_counter = next_instruction_address;
 
-                register_write_address = rd;
-                register_write_value = alu_result;
-            end
-            OPCODE_AUIPC: begin
-                alu_opcode = ALU_OPCODE_ADD;
-                alu_operand_1 = program_counter;
-                alu_operand_2 = u_immediate;
+            case(opcode)
+                OPCODE_LUI: begin
+                    alu_opcode = ALU_OPCODE_ADD;
+                    alu_operand_1 = 0;
+                    alu_operand_2 = u_immediate;
 
-                register_write_address = rd;
-                register_write_value = alu_result;
-            end
-            OPCODE_JAL: begin
-                alu_opcode = ALU_OPCODE_ADD;
-                alu_operand_1 = program_counter;
-                alu_operand_2 = j_immediate;
-                next_program_counter = alu_result;
-
-                register_write_address = rd;
-                register_write_value = next_instruction_address;
-            end
-            OPCODE_JALR: begin
-                alu_opcode = ALU_OPCODE_ADD;
-                alu_operand_1 = register_read_value_1;
-                alu_operand_2 = i_immediate;
-                next_program_counter = { alu_result[31:1], 1'b0 };
-
-                register_write_address = rd;
-                register_write_value = next_instruction_address;
-            end
-            OPCODE_BRANCH: begin
-                comparator_opcode = funct3;
-                comparator_operand_1 = register_read_value_1;
-                comparator_operand_2 = register_read_value_2;
-
-                alu_opcode = ALU_OPCODE_ADD;
-                alu_operand_1 = program_counter;
-                alu_operand_2 = b_immediate;
-
-                if (comparator_result) begin
-                    next_program_counter = alu_result;
-                end
-            end
-            OPCODE_LOAD: begin
-                alu_opcode = ALU_OPCODE_ADD;
-                alu_operand_1 = register_read_value_1;
-                alu_operand_2 = i_immediate;
-                memory_address = alu_result;
-
-                register_write_address = rd;
-                case (funct3)
-                    FUNCT3_LW: register_write_value = memory_value;
-                    FUNCT3_LH: register_write_value = { {16{memory_value[15]}}, memory_value[15:0] };
-                    FUNCT3_LHU: register_write_value = { 16'b0, memory_value[15:0] };
-                    FUNCT3_LB: register_write_value = { {24{memory_value[7]}}, memory_value[7:0] };
-                    FUNCT3_LBU: register_write_value = { 24'b0, memory_value[7:0] };
-                    default: register_write_value = 32'bx;
-                endcase
-            end
-            OPCODE_STORE: begin
-                alu_opcode = ALU_OPCODE_ADD;
-                alu_operand_1 = register_read_value_1;
-                alu_operand_2 = s_immediate;
-                memory_address = alu_result;
-                memory_value = register_read_value_2;
-
-                case (funct3)
-                    FUNCT3_SW: memory_write_sections = 3'b111;
-                    FUNCT3_SH: memory_write_sections = 3'b011;
-                    FUNCT3_SB: memory_write_sections = 3'b001;
-                    default: memory_write_sections = 3'bx;
-                endcase
-            end
-            OPCODE_IMMEDIATE: begin
-                if (funct3 == FUNCT3_SLL || funct3 == FUNCT3_SRL || funct3 == FUNCT3_SRA) begin
-                    alu_opcode = { instruction[30], funct3 };
-                end else begin
-                    alu_opcode = { 1'b0, funct3 };
-                end
-                alu_operand_1 = register_read_value_1;
-                alu_operand_2 = i_immediate;
-
-                register_write_address = rd;
-                if (funct3 == FUNCT3_SLT || funct3 == FUNCT3_SLTU) begin
-                    comparator_opcode = { 1'b1, funct3[0], 1'b0 };
-                    comparator_operand_1 = register_read_value_1;
-                    comparator_operand_2 = i_immediate;
-
-                    register_write_value = { 31'b0, comparator_result };
-                end else begin
+                    register_write_address = rd;
                     register_write_value = alu_result;
                 end
-            end
-            OPCODE_ARITHMETIC: begin
-                alu_opcode = { instruction[30], funct3 };
-                alu_operand_1 = register_read_value_1;
-                alu_operand_2 = register_read_value_2;
+                OPCODE_AUIPC: begin
+                    alu_opcode = ALU_OPCODE_ADD;
+                    alu_operand_1 = program_counter;
+                    alu_operand_2 = u_immediate;
 
-                register_write_address = rd;
-                if (funct3 == FUNCT3_SLT || funct3 == FUNCT3_SLTU) begin
-                    comparator_opcode = { 1'b1, funct3[0], 1'b0 };
+                    register_write_address = rd;
+                    register_write_value = alu_result;
+                end
+                OPCODE_JAL: begin
+                    alu_opcode = ALU_OPCODE_ADD;
+                    alu_operand_1 = program_counter;
+                    alu_operand_2 = j_immediate;
+                    next_program_counter = alu_result;
+
+                    register_write_address = rd;
+                    register_write_value = next_instruction_address;
+                end
+                OPCODE_JALR: begin
+                    alu_opcode = ALU_OPCODE_ADD;
+                    alu_operand_1 = register_read_value_1;
+                    alu_operand_2 = i_immediate;
+                    next_program_counter = { alu_result[31:1], 1'b0 };
+
+                    register_write_address = rd;
+                    register_write_value = next_instruction_address;
+                end
+                OPCODE_BRANCH: begin
+                    comparator_opcode = funct3;
                     comparator_operand_1 = register_read_value_1;
                     comparator_operand_2 = register_read_value_2;
 
-                    register_write_value = { 31'b0, comparator_result };
-                end else begin
-                    register_write_value = alu_result;
+                    alu_opcode = ALU_OPCODE_ADD;
+                    alu_operand_1 = program_counter;
+                    alu_operand_2 = b_immediate;
+
+                    if (comparator_result) begin
+                        next_program_counter = alu_result;
+                    end
                 end
-            end
-            OPCODE_SYSTEM: begin
-                if (instruction[20] == 0) begin
-                    // ECALL
-                    `ifdef simulation
-                        finish = 1;
-                    `endif
-                end else begin
-                    // EBREAK
-                    `ifdef simulation
-                        error = 1'b1;
-                    `endif
+                OPCODE_LOAD: begin
+                    alu_opcode = ALU_OPCODE_ADD;
+                    alu_operand_1 = register_read_value_1;
+                    alu_operand_2 = i_immediate;
+                    memory_address = alu_result;
+
+                    register_write_address = rd;
+                    case (funct3)
+                        FUNCT3_LW: register_write_value = memory_value;
+                        FUNCT3_LH: register_write_value = { {16{memory_value[15]}}, memory_value[15:0] };
+                        FUNCT3_LHU: register_write_value = { 16'b0, memory_value[15:0] };
+                        FUNCT3_LB: register_write_value = { {24{memory_value[7]}}, memory_value[7:0] };
+                        FUNCT3_LBU: register_write_value = { 24'b0, memory_value[7:0] };
+                        default: register_write_value = 32'bx;
+                    endcase
                 end
-            end
-            // to avoid a synthesizer warning for incomplete case
-            default: begin end
-        endcase
+                OPCODE_STORE: begin
+                    alu_opcode = ALU_OPCODE_ADD;
+                    alu_operand_1 = register_read_value_1;
+                    alu_operand_2 = s_immediate;
+                    memory_address = alu_result;
+                    memory_value = register_read_value_2;
+
+                    case (funct3)
+                        FUNCT3_SW: memory_write_sections = 3'b111;
+                        FUNCT3_SH: memory_write_sections = 3'b011;
+                        FUNCT3_SB: memory_write_sections = 3'b001;
+                        default: memory_write_sections = 3'bx;
+                    endcase
+                end
+                OPCODE_IMMEDIATE: begin
+                    if (funct3 == FUNCT3_SLL || funct3 == FUNCT3_SRL || funct3 == FUNCT3_SRA) begin
+                        alu_opcode = { instruction[30], funct3 };
+                    end else begin
+                        alu_opcode = { 1'b0, funct3 };
+                    end
+                    alu_operand_1 = register_read_value_1;
+                    alu_operand_2 = i_immediate;
+
+                    register_write_address = rd;
+                    if (funct3 == FUNCT3_SLT || funct3 == FUNCT3_SLTU) begin
+                        comparator_opcode = { 1'b1, funct3[0], 1'b0 };
+                        comparator_operand_1 = register_read_value_1;
+                        comparator_operand_2 = i_immediate;
+
+                        register_write_value = { 31'b0, comparator_result };
+                    end else begin
+                        register_write_value = alu_result;
+                    end
+                end
+                OPCODE_ARITHMETIC: begin
+                    alu_opcode = { instruction[30], funct3 };
+                    alu_operand_1 = register_read_value_1;
+                    alu_operand_2 = register_read_value_2;
+
+                    register_write_address = rd;
+                    if (funct3 == FUNCT3_SLT || funct3 == FUNCT3_SLTU) begin
+                        comparator_opcode = { 1'b1, funct3[0], 1'b0 };
+                        comparator_operand_1 = register_read_value_1;
+                        comparator_operand_2 = register_read_value_2;
+
+                        register_write_value = { 31'b0, comparator_result };
+                    end else begin
+                        register_write_value = alu_result;
+                    end
+                end
+                OPCODE_SYSTEM: begin
+                    if (instruction[20] == 0) begin
+                        // ECALL
+                        `ifdef simulation
+                            finish = 1;
+                        `endif
+                    end else begin
+                        // EBREAK
+                        `ifdef simulation
+                            error = 1'b1;
+                        `endif
+                    end
+                end
+                // to avoid a synthesizer warning for incomplete case
+                default: begin end
+            endcase
+        end
     end
 
     always @(posedge clock) begin
         program_counter = next_program_counter;
+        stall = 0;
     end
 
     `ifdef simulation

@@ -8,15 +8,20 @@ module top(
     output rgb_led0_b
 );
 
-    wire [31:0] program_memory_value, memory_address;
-    reg [31:0] memory_value, program_counter;
+    // nextpnr reports this as a 12 mhz clock; this is a bug in nextpnr,
+    // I confirmed on hardware that the observed clock is 24 mhz
+    reg clk24 = 0;
+
+    wire [31:0] memory_address;
+    reg [31:0] program_memory_value, memory_value, next_program_counter;
     wire [2:0] memory_write_sections;
 
+    (* ram_style = "block" *)
     reg [7:0] program_memory[PROGRAM_MEMORY_SIZE - 1:0];
 
     reg led_on = 0;
 
-    core core(clk48, program_counter, program_memory_value, memory_address, memory_value, memory_write_sections);
+    core core(clk24, next_program_counter, program_memory_value, memory_address, memory_value, memory_write_sections);
 
     initial $readmemh(`MEMORY_FILE, program_memory);
 
@@ -24,12 +29,18 @@ module top(
     assign rgb_led0_g = ~led_on;
     assign rgb_led0_b = ~led_on;
 
-    assign program_memory_value = { program_memory[program_counter + 3], program_memory[program_counter + 2], program_memory[program_counter + 1], program_memory[program_counter] };
-
-    always @(posedge clk48) begin
+    always @(posedge clk24) begin
         if (memory_write_sections != 0) begin
             led_on = memory_value != 0;
         end
+    end
+
+    always @(posedge clk24) begin
+        program_memory_value = { program_memory[next_program_counter + 3], program_memory[next_program_counter + 2], program_memory[next_program_counter + 1], program_memory[next_program_counter] };
+    end
+
+    always @(posedge clk48) begin
+        clk24 = ~clk24;
     end
 
     /*
