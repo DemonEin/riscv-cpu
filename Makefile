@@ -4,6 +4,8 @@ gcc_binary_prefix = ~/riscv-gcc/bin/riscv32-elf-
 
 needed_verilog_files = top.v core.v comparator.v alu.v registers.v
 
+.NOTINTERMEDIATE:
+
 %/verilator/Vtb_top: tb_top.v %/memory.hex %/entry.txt $(needed_verilog_files)
 	@# TODO consider using -Wall
 	verilator +1364-2005ext+v +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) +define+MEMORY_FILE=\"$*/memory.hex\" --binary -j 0 tb_top.v $(needed_verilog_files) -Mdir $(@D)
