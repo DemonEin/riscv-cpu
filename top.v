@@ -1,4 +1,4 @@
-localparam PROGRAM_MEMORY_SIZE = 32'h1000;
+localparam MEMORY_SIZE = 32'h1000;
 
 module top(
     input clk48,
@@ -17,13 +17,13 @@ module top(
     wire [2:0] memory_write_sections;
 
     (* ram_style = "block" *)
-    reg [7:0] program_memory[PROGRAM_MEMORY_SIZE - 1:0];
+    reg [7:0] memory[MEMORY_SIZE - 1:0];
 
     reg led_on = 0;
 
     core core(clk24, next_program_counter, program_memory_value, memory_address, memory_value, memory_write_sections);
 
-    initial $readmemh(`MEMORY_FILE, program_memory);
+    initial $readmemh(`MEMORY_FILE, memory);
 
     assign rgb_led0_r = ~led_on;
     assign rgb_led0_g = ~led_on;
@@ -36,7 +36,7 @@ module top(
     end
 
     always @(posedge clk24) begin
-        program_memory_value = { program_memory[next_program_counter + 3], program_memory[next_program_counter + 2], program_memory[next_program_counter + 1], program_memory[next_program_counter] };
+        program_memory_value = { memory[next_program_counter + 3], memory[next_program_counter + 2], memory[next_program_counter + 1], memory[next_program_counter] };
     end
 
     always @(posedge clk48) begin
