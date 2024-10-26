@@ -1,5 +1,14 @@
+
+string:
+.ascii "hello"
+
+.align 4
 .global _start
 _start:
+    lb x1, string + 2
+    li x2, 'l'
+    bne x1, x2, fail
+
     li x1, 1
     li x2, 1
     bne x1, x2, fail
@@ -31,6 +40,8 @@ _start:
     li x2, 0
     sw x1, 0(x0)
     lw x2, 0(x0)
+    # TODO remove when I implement a stall for this
+    nop
     bne x1, x2, fail
 
     # pass test

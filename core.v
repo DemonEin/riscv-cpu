@@ -58,18 +58,16 @@ localparam ALU_OPCODE_RIGHT_SHIFT_ARITHMETIC = { 1'b1, FUNCT3_SRA };
 localparam ALU_OPCODE_OR = { 1'b0, FUNCT3_OR };
 localparam ALU_OPCODE_AND = { 1'b0, FUNCT3_AND };
 
-module core(clock, next_program_counter, program_memory_value, memory_address, memory_value, memory_write_sections);
+module core(clock, next_program_counter, program_memory_value, memory_address, memory_write_value, memory_write_sections, memory_read_value);
 
     input clock;
     input [31:0] program_memory_value;
+    input [31:0] memory_read_value;
 
-    output reg [31:0] next_program_counter, memory_address;
+    output reg [31:0] next_program_counter, memory_address, memory_write_value;
     // MSB 1 means write high half-word, middle bit 1 means write low
     // half-word high byte, LSB means write low byte
-    // all zeros means read
     output reg [2:0] memory_write_sections;
-
-    inout reg [31:0] memory_value;
 
     wire [31:0] instruction, alu_result, memory_read_value, next_instruction_address, register_read_value_1, register_read_value_2;
     wire [31:0] i_immediate, s_immediate, b_immediate, u_immediate, j_immediate;
@@ -80,9 +78,9 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
 
     reg [31:0] program_counter, register_write_value_1, register_write_value_2, alu_operand_1, alu_operand_2, comparator_operand_1, comparator_operand_2;
     initial program_counter = `INITIAL_PROGRAM_COUNTER;
-    reg [4:0] register_write_address_1, register_write_address_2;
+    reg [4:0] register_write_address_1, register_write_address_2, load_register, pending_load_register;
     reg [3:0] alu_opcode;
-    reg [2:0] comparator_opcode;
+    reg [2:0] comparator_opcode, load_funct3, pending_load_funct3;
 
     reg stall = 1;
 
@@ -123,13 +121,26 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
 
         register_write_address_1 = 5'b0;
         register_write_value_1 = 32'bx;
-        register_write_address_2 = 5'b0;
-        register_write_value_2 = 32'bx;
         memory_address = 32'bx;
+        memory_write_value = 32'bx;
         memory_write_sections = 0;
-        memory_value = 32'bx;
+
+        // load operations take 2 cycles to complete because the memory is
+        // synchronous so the register write has to be delayed until the next cycle
+        pending_load_register = 5'b0;
+        pending_load_funct3 = 3'bx;
 
         next_program_counter = program_counter;
+
+        register_write_address_2 = load_register;
+        case (load_funct3)
+            FUNCT3_LW: register_write_value_2 = memory_read_value;
+            FUNCT3_LH: register_write_value_2 = { {16{memory_read_value[15]}}, memory_read_value[15:0] };
+            FUNCT3_LHU: register_write_value_2 = { 16'b0, memory_read_value[15:0] };
+            FUNCT3_LB: register_write_value_2 = { {24{memory_read_value[7]}}, memory_read_value[7:0] };
+            FUNCT3_LBU: register_write_value_2 = { 24'b0, memory_read_value[7:0] };
+            default: register_write_value_2 = 32'bx;
+        endcase
 
         if (!stall) begin
             next_program_counter = next_instruction_address;
@@ -188,22 +199,15 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                     alu_operand_2 = i_immediate;
                     memory_address = alu_result;
 
-                    register_write_address_1 = rd;
-                    case (funct3)
-                        FUNCT3_LW: register_write_value_1 = memory_value;
-                        FUNCT3_LH: register_write_value_1 = { {16{memory_value[15]}}, memory_value[15:0] };
-                        FUNCT3_LHU: register_write_value_1 = { 16'b0, memory_value[15:0] };
-                        FUNCT3_LB: register_write_value_1 = { {24{memory_value[7]}}, memory_value[7:0] };
-                        FUNCT3_LBU: register_write_value_1 = { 24'b0, memory_value[7:0] };
-                        default: register_write_value_1 = 32'bx;
-                    endcase
+                    pending_load_register = rd;
+                    pending_load_funct3 = funct3;
                 end
                 OPCODE_STORE: begin
                     alu_opcode = ALU_OPCODE_ADD;
                     alu_operand_1 = register_read_value_1;
                     alu_operand_2 = s_immediate;
                     memory_address = alu_result;
-                    memory_value = register_read_value_2;
+                    memory_write_value = register_read_value_2;
 
                     case (funct3)
                         FUNCT3_SW: memory_write_sections = 3'b111;
@@ -270,6 +274,8 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     always @(posedge clock) begin
         program_counter = next_program_counter;
         stall = 0;
+        load_register <= pending_load_register;
+        load_funct3 <= pending_load_funct3;
     end
 
     `ifdef simulation

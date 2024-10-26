@@ -18,7 +18,7 @@ needed_verilog_files = top.v core.v comparator.v alu.v registers.v
 		--memory $*/memory.bin --entry $*/entry.txt $<
 
 %.hex: %.bin
-	hexdump -v -e '/1 "%x "' $< > $@
+	hexdump -v -e '/4 "%x "' $< > $@
 
 $(target_directory):
 	mkdir -p $@
