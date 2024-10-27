@@ -40,8 +40,6 @@ _start:
     li x2, 0
     sw x1, 0(x0)
     lw x2, 0(x0)
-    # TODO remove when I implement a stall for this
-    nop
     bne x1, x2, fail
 
     # pass test

@@ -69,14 +69,14 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     // half-word high byte, LSB means write low byte
     output reg [2:0] memory_write_sections;
 
-    wire [31:0] instruction, alu_result, memory_read_value, next_instruction_address, register_read_value_1, register_read_value_2;
+    wire [31:0] instruction, alu_result, memory_read_value, next_instruction_address, base_register_read_value_1, base_register_read_value_2;
     wire [31:0] i_immediate, s_immediate, b_immediate, u_immediate, j_immediate;
     wire [4:0] opcode;
     wire [4:0] register_read_address_1, register_read_address_2, rd;
     wire [2:0] funct3;
     wire comparator_result;
 
-    reg [31:0] program_counter, register_write_value_1, register_write_value_2, alu_operand_1, alu_operand_2, comparator_operand_1, comparator_operand_2;
+    reg [31:0] program_counter, register_write_value_1, register_write_value_2, register_read_value_1, register_read_value_2, alu_operand_1, alu_operand_2, comparator_operand_1, comparator_operand_2;
     initial program_counter = `INITIAL_PROGRAM_COUNTER;
     reg [4:0] register_write_address_1, register_write_address_2, load_register, pending_load_register;
     reg [3:0] alu_opcode;
@@ -89,7 +89,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         reg error;
     `endif
 
-    registers registers(clock, register_write_address_1, register_write_value_1, register_write_address_2, register_write_value_2, register_read_address_1, register_read_value_1, register_read_address_2, register_read_value_2);
+    registers registers(clock, register_write_address_1, register_write_value_1, register_write_address_2, register_write_value_2, register_read_address_1, base_register_read_value_1, register_read_address_2, base_register_read_value_2);
     alu alu(alu_opcode, alu_operand_1, alu_operand_2, alu_result);
     comparator comparator(comparator_opcode, comparator_operand_1, comparator_operand_2, comparator_result);
 
@@ -130,17 +130,34 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         pending_load_register = 5'b0;
         pending_load_funct3 = 3'bx;
 
+        register_read_value_1 = base_register_read_value_1;
+        register_read_value_2 = base_register_read_value_2;
+
         next_program_counter = program_counter;
 
-        register_write_address_2 = load_register;
-        case (load_funct3)
-            FUNCT3_LW: register_write_value_2 = memory_read_value;
-            FUNCT3_LH: register_write_value_2 = { {16{memory_read_value[15]}}, memory_read_value[15:0] };
-            FUNCT3_LHU: register_write_value_2 = { 16'b0, memory_read_value[15:0] };
-            FUNCT3_LB: register_write_value_2 = { {24{memory_read_value[7]}}, memory_read_value[7:0] };
-            FUNCT3_LBU: register_write_value_2 = { 24'b0, memory_read_value[7:0] };
-            default: register_write_value_2 = 32'bx;
-        endcase
+        if (load_register != 0) begin
+            register_write_address_2 = load_register;
+            case (load_funct3)
+                FUNCT3_LW: register_write_value_2 = memory_read_value;
+                FUNCT3_LH: register_write_value_2 = { {16{memory_read_value[15]}}, memory_read_value[15:0] };
+                FUNCT3_LHU: register_write_value_2 = { 16'b0, memory_read_value[15:0] };
+                FUNCT3_LB: register_write_value_2 = { {24{memory_read_value[7]}}, memory_read_value[7:0] };
+                FUNCT3_LBU: register_write_value_2 = { 24'b0, memory_read_value[7:0] };
+                default: register_write_value_2 = 32'bx;
+            endcase
+            // these are so that the load is reflected in the instruction
+            // following the load even though it hasn't actually written to
+            // register yet
+            if (load_register == register_read_address_1) begin
+                register_read_value_1 = register_write_value_2;
+            end
+            if (load_register == register_read_address_2) begin
+                register_read_value_2 = register_write_value_2;
+            end
+        end else begin
+            register_write_address_2 = 0;
+            register_write_value_2 = 32'bx;
+        end
 
         if (!stall) begin
             next_program_counter = next_instruction_address;
