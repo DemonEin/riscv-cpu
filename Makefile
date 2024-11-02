@@ -55,14 +55,18 @@ test:
 blinkinstall:
 	make install target_directory=target/blink program_files="blink.s blink.c"
 
+.PHONY: testsynth
+testsynth: 
+	make target/test/cpu.json target_directory=target/test program_files=test.s
+
 .PHONY: clean
 clean:
 	rm -rf target
 
 .PHONY: readelf
-readelf: target/a.out
+readelf: target/test/a.out
 	readelf -a $<
 
 .PHONY: disassemble
-objdump: target/a.out
-	$(gcc_binary_prefix)objdump -D $<
+disassemble: target/test/a.out
+	$(gcc_binary_prefix)objdump -d $<
