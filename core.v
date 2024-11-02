@@ -289,8 +289,8 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     end
 
     always @(posedge clock) begin
-        program_counter = next_program_counter;
-        stall = 0;
+        program_counter <= next_program_counter;
+        stall <= 0;
         load_register <= pending_load_register;
         load_funct3 <= pending_load_funct3;
     end

@@ -9,11 +9,11 @@ module registers(clock, write_address_1, write_value_1, write_address_2, write_v
     reg [31:0] r[31:1];
 
     always @(posedge clock) begin
-        if (write_address_2 != 0) begin
-            r[write_address_2] = write_value_2;
-        end
         if (write_address_1 != 0) begin
-            r[write_address_1] = write_value_1;
+            r[write_address_1] <= write_value_1;
+        end
+        if (write_address_2 != 0 && write_address_2 != write_address_1) begin
+            r[write_address_2] <= write_value_2;
         end
     end
 

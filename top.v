@@ -33,7 +33,7 @@ module top(
 
     always @(posedge clk24) begin
         if (memory_write_sections != 0) begin
-            led_on = memory_write_value != 0;
+            led_on <= memory_write_value != 0;
         end
     end
 
@@ -60,7 +60,7 @@ module top(
     end
 
     always @(posedge clk48) begin
-        clk24 = ~clk24;
+        clk24 <= ~clk24;
     end
 
 endmodule

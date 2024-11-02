@@ -4,11 +4,12 @@ gcc_binary_prefix = ~/riscv-gcc/bin/riscv32-elf-
 
 needed_verilog_files = top.v core.v comparator.v alu.v registers.v
 
+VERILATOR_OPTIONS := +1364-2005ext+v -Wwarn-BLKSEQ
+
 .NOTINTERMEDIATE:
 
 %/verilator/Vtb_top: tb_top.v %/memory.hex %/entry.txt $(needed_verilog_files)
-	@# TODO consider using -Wall
-	verilator +1364-2005ext+v +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) +define+MEMORY_FILE=\"$*/memory.hex\" --binary -j 0 tb_top.v $(needed_verilog_files) -Mdir $(@D)
+	verilator $(VERILATOR_OPTIONS) +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) +define+MEMORY_FILE=\"$*/memory.hex\" --binary -j 0 tb_top.v $(needed_verilog_files) -Mdir $(@D)
 
 %/a.out: $(program_files) linker-script | %
 	$(gcc_binary_prefix)gcc -march=rv32i -mabi=ilp32 -T linker-script -nostdlib -o $@ $(program_files)
@@ -26,7 +27,7 @@ $(target_directory):
 %/cpu.json: $(needed_verilog_files) %/memory.hex %/entry.txt
 	@# run verilator --lint-only before building because yosys does not report many simple errors
 	INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) && \
-	verilator +1364-2005ext+v --lint-only +define+INITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER +define+MEMORY_FILE='"$*/memory.hex"' $(needed_verilog_files) && \
+	verilator  --lint-only $(VERILATOR_OPTIONS) +define+INITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER +define+MEMORY_FILE='"$*/memory.hex"' $(needed_verilog_files) && \
 	yosys -p "read_verilog -DINITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER -DMEMORY_FILE=\"$*/memory.hex\" $(needed_verilog_files); synth_ecp5 -json $@"
 
 %.config: %.json orangecrab.lpf
