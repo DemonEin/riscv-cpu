@@ -12,7 +12,7 @@ VERILATOR_OPTIONS := +1364-2005ext+v -Wwarn-BLKSEQ
 	verilator $(VERILATOR_OPTIONS) +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) +define+MEMORY_FILE=\"$*/memory.hex\" --binary -j 0 tb_top.v $(needed_verilog_files) -Mdir $(@D)
 
 %/a.out: $(program_files) linker-script | %
-	$(gcc_binary_prefix)gcc -march=rv32i -mabi=ilp32 -T linker-script -nostdlib -o $@ $(program_files)
+	$(gcc_binary_prefix)gcc -march=rv32i_zicsr -mabi=ilp32 -T linker-script -nostdlib -o $@ $(program_files)
 
 %/memory.bin %/entry.txt &: %/a.out
 	cargo run --manifest-path loader/Cargo.toml -- \
