@@ -308,50 +308,50 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                         FUNCT3_CSRRW: begin
                             csr_address = csr;
                             register_write_address_1 = rd;
-                            csr_write_enable = 1;
                             register_write_value_1 = csr_read_value;
+                            csr_write_enable = 1;
                             csr_write_value = register_read_value_1;
                         end
                         FUNCT3_CSRRS: begin
                             csr_address = csr;
                             register_write_address_1 = rd;
+                            register_write_value_1 = csr_read_value;
                             if (register_read_address_1 != 0) begin
                                 csr_write_enable = 1;
-                                register_write_value_1 = csr_read_value;
                                 csr_write_value = csr_read_value | register_read_value_1;
                             end
                         end
                         FUNCT3_CSRRC: begin
                             csr_address = csr;
                             register_write_address_1 = rd;
+                            register_write_value_1 = csr_read_value;
                             if (register_read_address_1 != 0) begin
                                 csr_write_enable = 1;
-                                register_write_value_1 = csr_read_value;
                                 csr_write_value = csr_read_value & (~register_read_value_1);
                             end
                         end
                         FUNCT3_CSRRWI: begin
                             csr_address = csr;
                             register_write_address_1 = rd;
-                            csr_write_enable = 1;
                             register_write_value_1 = csr_read_value;
+                            csr_write_enable = 1;
                             csr_write_value = csr_immediate;
                         end
                         FUNCT3_CSRRSI: begin
                             csr_address = csr;
                             register_write_address_1 = rd;
+                            register_write_value_1 = csr_read_value;
                             if (csr_immediate != 0) begin
                                 csr_write_enable = 1;
-                                register_write_value_1 = csr_read_value;
                                 csr_write_value = csr_read_value | csr_immediate;
                             end
                         end
                         FUNCT3_CSRRCI: begin
                             csr_address = csr;
                             register_write_address_1 = rd;
+                            register_write_value_1 = csr_read_value;
                             if (csr_immediate != 0) begin
                                 csr_write_enable = 1;
-                                register_write_value_1 = csr_read_value;
                                 csr_write_value = csr_read_value & (~csr_immediate);
                             end
                         end
