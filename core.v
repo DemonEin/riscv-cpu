@@ -92,6 +92,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     reg [4:0] register_write_address_1, register_write_address_2, load_register, pending_load_register;
     reg [3:0] alu_opcode;
     reg [2:0] comparator_opcode, load_funct3, pending_load_funct3;
+    reg csr_write_enable;
 
     reg stall = 1;
 
@@ -103,7 +104,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     registers registers(clock, register_write_address_1, register_write_value_1, register_write_address_2, register_write_value_2, register_read_address_1, base_register_read_value_1, register_read_address_2, base_register_read_value_2);
     alu alu(alu_opcode, alu_operand_1, alu_operand_2, alu_result);
     comparator comparator(comparator_opcode, comparator_operand_1, comparator_operand_2, comparator_result);
-    csr control_status_registers(csr_address, csr_read_value, csr_write_value);
+    csr control_status_registers(clock, csr_address, csr_read_value, csr_write_value, csr_write_enable);
 
     assign instruction = program_memory_value;
     assign opcode = instruction[6:2];
@@ -139,8 +140,9 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         memory_address = 32'bx;
         memory_write_value = 32'bx;
         memory_write_sections = 0;
-        // TODO come up with a side-effect free default
-        csr_address = 0;
+
+        csr_write_enable = 0;
+        csr_address = 12'bx;
 
         // load operations take 2 cycles to complete because the memory is
         // synchronous so the register write has to be delayed until the next cycle
@@ -303,42 +305,55 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                 default: begin end
                             endcase
                         end
-                        // TODO confirm zero side-effect behavior of rs1=x0 and rd=x0
                         FUNCT3_CSRRW: begin
                             csr_address = csr;
                             register_write_address_1 = rd;
+                            csr_write_enable = 1;
                             register_write_value_1 = csr_read_value;
                             csr_write_value = register_read_value_1;
                         end
                         FUNCT3_CSRRS: begin
                             csr_address = csr;
                             register_write_address_1 = rd;
-                            register_write_value_1 = csr_read_value;
-                            csr_write_value = csr_read_value | register_read_value_1;
+                            if (register_read_address_1 != 0) begin
+                                csr_write_enable = 1;
+                                register_write_value_1 = csr_read_value;
+                                csr_write_value = csr_read_value | register_read_value_1;
+                            end
                         end
                         FUNCT3_CSRRC: begin
                             csr_address = csr;
                             register_write_address_1 = rd;
-                            register_write_value_1 = csr_read_value;
-                            csr_write_value = csr_read_value & (~register_read_value_1);
+                            if (register_read_address_1 != 0) begin
+                                csr_write_enable = 1;
+                                register_write_value_1 = csr_read_value;
+                                csr_write_value = csr_read_value & (~register_read_value_1);
+                            end
                         end
                         FUNCT3_CSRRWI: begin
                             csr_address = csr;
                             register_write_address_1 = rd;
+                            csr_write_enable = 1;
                             register_write_value_1 = csr_read_value;
                             csr_write_value = csr_immediate;
                         end
                         FUNCT3_CSRRSI: begin
                             csr_address = csr;
                             register_write_address_1 = rd;
-                            register_write_value_1 = csr_read_value;
-                            csr_write_value = csr_read_value | csr_immediate;
+                            if (csr_immediate != 0) begin
+                                csr_write_enable = 1;
+                                register_write_value_1 = csr_read_value;
+                                csr_write_value = csr_read_value | csr_immediate;
+                            end
                         end
                         FUNCT3_CSRRCI: begin
                             csr_address = csr;
                             register_write_address_1 = rd;
-                            register_write_value_1 = csr_read_value;
-                            csr_write_value = csr_read_value & (~csr_immediate);
+                            if (csr_immediate != 0) begin
+                                csr_write_enable = 1;
+                                register_write_value_1 = csr_read_value;
+                                csr_write_value = csr_read_value & (~csr_immediate);
+                            end
                         end
                         default: begin end
                     endcase
