@@ -2,7 +2,7 @@
 # this is what I use
 gcc_binary_prefix = ~/riscv-gcc/bin/riscv32-elf-
 
-needed_verilog_files = top.v core.v comparator.v alu.v registers.v
+needed_verilog_files = top.v core.v comparator.v alu.v registers.v csr.v
 
 VERILATOR_OPTIONS := +1364-2005ext+v -Wwarn-BLKSEQ
 

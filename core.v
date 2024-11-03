@@ -44,8 +44,17 @@ localparam FUNCT3_SRA = 3'b101;
 localparam FUNCT3_OR = 3'b110;
 localparam FUNCT3_AND = 3'b111;
 
-localparam FUNCT3_FENCE = 3'b000;
-localparam FUNCT3_SYSTEM = 3'b000;
+localparam FUNCT3_PRIV = 3'b000;
+
+localparam FUNCT3_CSRRW = 3'b001;
+localparam FUNCT3_CSRRS = 3'b010;
+localparam FUNCT3_CSRRC = 3'b011;
+localparam FUNCT3_CSRRWI = 3'b101;
+localparam FUNCT3_CSRRSI = 3'b110;
+localparam FUNCT3_CSRRCI = 3'b111;
+
+localparam FUNC12_ECALL = 12'b0;
+localparam FUNC12_EBREAK = 12'b1;
 
 // the bit at index 3 is the bit at index 30 in the corresponding instruction
 // logic to produce the alu opcode relies on these being defined this way
@@ -69,15 +78,17 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     // half-word high byte, LSB means write low byte
     output reg [2:0] memory_write_sections;
 
-    wire [31:0] instruction, alu_result, memory_read_value, next_instruction_address, base_register_read_value_1, base_register_read_value_2;
-    wire [31:0] i_immediate, s_immediate, b_immediate, u_immediate, j_immediate;
+    wire [31:0] instruction, alu_result, memory_read_value, next_instruction_address, base_register_read_value_1, base_register_read_value_2, csr_read_value;
+    wire [31:0] i_immediate, s_immediate, b_immediate, u_immediate, j_immediate, csr_immediate;
+    wire [11:0] func12, csr;
     wire [4:0] opcode;
     wire [4:0] register_read_address_1, register_read_address_2, rd;
     wire [2:0] funct3;
     wire comparator_result;
 
-    reg [31:0] program_counter, register_write_value_1, register_write_value_2, register_read_value_1, register_read_value_2, alu_operand_1, alu_operand_2, comparator_operand_1, comparator_operand_2;
+    reg [31:0] program_counter, register_write_value_1, register_write_value_2, register_read_value_1, register_read_value_2, alu_operand_1, alu_operand_2, comparator_operand_1, comparator_operand_2, csr_write_value;
     initial program_counter = `INITIAL_PROGRAM_COUNTER;
+    reg [11:0] csr_address;
     reg [4:0] register_write_address_1, register_write_address_2, load_register, pending_load_register;
     reg [3:0] alu_opcode;
     reg [2:0] comparator_opcode, load_funct3, pending_load_funct3;
@@ -92,6 +103,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     registers registers(clock, register_write_address_1, register_write_value_1, register_write_address_2, register_write_value_2, register_read_address_1, base_register_read_value_1, register_read_address_2, base_register_read_value_2);
     alu alu(alu_opcode, alu_operand_1, alu_operand_2, alu_result);
     comparator comparator(comparator_opcode, comparator_operand_1, comparator_operand_2, comparator_result);
+    csr control_status_registers(csr_address, csr_read_value, csr_write_value);
 
     assign instruction = program_memory_value;
     assign opcode = instruction[6:2];
@@ -101,12 +113,15 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     assign b_immediate = { {20{instruction[31]}}, instruction[7], instruction[30:25], instruction[11:8], 1'b0 };
     assign u_immediate = { instruction[31:12], 12'b0 };
     assign j_immediate = { {12{instruction[31]}}, instruction[19:12], instruction[20], instruction[30:21], 1'b0 };
+    assign csr_immediate = { 27'b0, instruction[19:15] };
 
     assign funct3 = instruction[14:12];
+    assign func12 = instruction[31:20];
 
     assign register_read_address_1 = instruction[19:15];
     assign register_read_address_2 = instruction[24:20];
     assign rd = instruction[11:7];
+    assign csr = instruction[31:20];
 
     assign next_instruction_address = program_counter + 4;
 
@@ -124,6 +139,8 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         memory_address = 32'bx;
         memory_write_value = 32'bx;
         memory_write_sections = 0;
+        // TODO come up with a side-effect free default
+        csr_address = 0;
 
         // load operations take 2 cycles to complete because the memory is
         // synchronous so the register write has to be delayed until the next cycle
@@ -270,17 +287,61 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                     end
                 end
                 OPCODE_SYSTEM: begin
-                    if (instruction[20] == 0) begin
-                        // ECALL
-                        `ifdef simulation
-                            finish = 1;
-                        `endif
-                    end else begin
-                        // EBREAK
-                        `ifdef simulation
-                            error = 1'b1;
-                        `endif
-                    end
+                    case (funct3)
+                        FUNCT3_PRIV: begin
+                            case (func12)
+                                FUNC12_ECALL: begin
+                                    `ifdef simulation
+                                        finish = 1;
+                                    `endif
+                                end
+                                FUNC12_EBREAK: begin
+                                    `ifdef simulation
+                                        error = 1'b1;
+                                    `endif
+                                end
+                                default: begin end
+                            endcase
+                        end
+                        // TODO confirm zero side-effect behavior of rs1=x0 and rd=x0
+                        FUNCT3_CSRRW: begin
+                            csr_address = csr;
+                            register_write_address_1 = rd;
+                            register_write_value_1 = csr_read_value;
+                            csr_write_value = register_read_value_1;
+                        end
+                        FUNCT3_CSRRS: begin
+                            csr_address = csr;
+                            register_write_address_1 = rd;
+                            register_write_value_1 = csr_read_value;
+                            csr_write_value = csr_read_value | register_read_value_1;
+                        end
+                        FUNCT3_CSRRC: begin
+                            csr_address = csr;
+                            register_write_address_1 = rd;
+                            register_write_value_1 = csr_read_value;
+                            csr_write_value = csr_read_value & (~register_read_value_1);
+                        end
+                        FUNCT3_CSRRWI: begin
+                            csr_address = csr;
+                            register_write_address_1 = rd;
+                            register_write_value_1 = csr_read_value;
+                            csr_write_value = csr_immediate;
+                        end
+                        FUNCT3_CSRRSI: begin
+                            csr_address = csr;
+                            register_write_address_1 = rd;
+                            register_write_value_1 = csr_read_value;
+                            csr_write_value = csr_read_value | csr_immediate;
+                        end
+                        FUNCT3_CSRRCI: begin
+                            csr_address = csr;
+                            register_write_address_1 = rd;
+                            register_write_value_1 = csr_read_value;
+                            csr_write_value = csr_read_value & (~csr_immediate);
+                        end
+                        default: begin end
+                    endcase
                 end
                 // to avoid a synthesizer warning for incomplete case
                 default: begin end
