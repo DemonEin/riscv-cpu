@@ -42,6 +42,25 @@ _start:
     lw x2, 0(x0)
     bne x1, x2, fail
 
+    # test csr's
+    li x1, 0
+    csrrw x1, misa, x0
+    li x2, 0x3FFFFFF # low 26 bits
+    and x1, x1, x2
+    beq x1, x0, fail
+
+    li x1, 10
+    csrrw x0, mscratch, x1
+    csrrw x2, mscratch, x0
+    bne x1, x2, fail
+
+    li x1, 0
+    csrrw x0, mscratch, x1
+    li x1, 10
+    csrrs x0, mscratch, x1
+    csrrw x2, mscratch, x0
+    bne x1, x2, fail
+
     # pass test
     ecall
 
