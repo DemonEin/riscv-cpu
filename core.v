@@ -1,16 +1,14 @@
-// opcodes, using only the five bits that disambiguate them
-// (the low two bits are always 11)
-localparam OPCODE_LUI = 5'b01101;
-localparam OPCODE_AUIPC = 5'b00101;
-localparam OPCODE_JAL = 5'b11011;
-localparam OPCODE_JALR = 5'b11001;
-localparam OPCODE_BRANCH = 5'b11000;
-localparam OPCODE_LOAD = 5'b00000;
-localparam OPCODE_STORE = 5'b01000;
-localparam OPCODE_IMMEDIATE = 5'b00100;
-localparam OPCODE_ARITHMETIC = 5'b01100;
-localparam OPCODE_FENCE = 5'b00011; // includes PAUSE instruction
-localparam OPCODE_SYSTEM = 5'b11100;
+localparam OPCODE_LUI = 7'b0110111;
+localparam OPCODE_AUIPC = 7'b0010111;
+localparam OPCODE_JAL = 7'b1101111;
+localparam OPCODE_JALR = 7'b1100111;
+localparam OPCODE_BRANCH = 7'b1100011;
+localparam OPCODE_LOAD = 7'b0000011;
+localparam OPCODE_STORE = 7'b0100011;
+localparam OPCODE_IMMEDIATE = 7'b0010011;
+localparam OPCODE_ARITHMETIC = 7'b0110011;
+localparam OPCODE_FENCE = 7'b0001111; // includes PAUSE instruction
+localparam OPCODE_SYSTEM = 7'b1110011;
 
 localparam FUNCT3_JALR = 3'b000;
 
@@ -83,7 +81,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     wire [31:0] instruction, alu_result, memory_read_value, next_instruction_address, base_register_read_value_1, base_register_read_value_2, csr_read_value;
     wire [31:0] i_immediate, s_immediate, b_immediate, u_immediate, j_immediate, csr_immediate;
     wire [11:0] func12, csr;
-    wire [4:0] opcode;
+    wire [6:0] opcode;
     wire [4:0] register_read_address_1, register_read_address_2, rd;
     wire [2:0] funct3;
     wire comparator_result;
@@ -112,7 +110,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     csr control_status_registers(clock, csr_address, csr_read_value, csr_write_value, csr_write_enable);
 
     assign instruction = program_memory_value;
-    assign opcode = instruction[6:2];
+    assign opcode = instruction[6:0];
 
     assign i_immediate = { {21{instruction[31]}}, instruction[30:20] };
     assign s_immediate = { {21{instruction[31]}}, instruction[30:25], instruction[11:7] };
