@@ -311,7 +311,11 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                         error = 1'b1;
                                     `endif
                                 end
-                                default: begin end
+                                default: begin
+                                    trap = 1;
+                                    interrupt = 0;
+                                    exception_code = EXCEPTION_CODE_ILLEGAL_INSTRUCTION;
+                                end
                             endcase
                         end
                         FUNCT3_CSRRW: begin
