@@ -312,9 +312,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                     `endif
                                 end
                                 default: begin
-                                    trap = 1;
-                                    interrupt = 0;
-                                    exception_code = EXCEPTION_CODE_ILLEGAL_INSTRUCTION;
+                                    raise_illegal_instruction_exception();
                                 end
                             endcase
                         end
@@ -326,9 +324,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                 csr_write_enable = 1;
                                 csr_write_value = register_read_value_1;
                             end else begin
-                                trap = 1;
-                                interrupt = 0;
-                                exception_code = EXCEPTION_CODE_ILLEGAL_INSTRUCTION;
+                                raise_illegal_instruction_exception();
                             end
                         end
                         FUNCT3_CSRRS: begin
@@ -341,9 +337,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                     csr_write_value = csr_read_value | register_read_value_1;
                                 end
                             end else begin
-                                trap = 1;
-                                interrupt = 0;
-                                exception_code = EXCEPTION_CODE_ILLEGAL_INSTRUCTION;
+                                raise_illegal_instruction_exception();
                             end
                         end
                         FUNCT3_CSRRC: begin
@@ -356,9 +350,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                     csr_write_value = csr_read_value & (~register_read_value_1);
                                 end
                             end else begin
-                                trap = 1;
-                                interrupt = 0;
-                                exception_code = EXCEPTION_CODE_ILLEGAL_INSTRUCTION;
+                                raise_illegal_instruction_exception();
                             end
                         end
                         FUNCT3_CSRRWI: begin
@@ -369,9 +361,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                 csr_write_enable = 1;
                                 csr_write_value = csr_immediate;
                             end else begin
-                                trap = 1;
-                                interrupt = 0;
-                                exception_code = EXCEPTION_CODE_ILLEGAL_INSTRUCTION;
+                                raise_illegal_instruction_exception();
                             end
                         end
                         FUNCT3_CSRRSI: begin
@@ -384,9 +374,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                     csr_write_value = csr_read_value | csr_immediate;
                                 end
                             end else begin
-                                trap = 1;
-                                interrupt = 0;
-                                exception_code = EXCEPTION_CODE_ILLEGAL_INSTRUCTION;
+                                raise_illegal_instruction_exception();
                             end
                         end
                         FUNCT3_CSRRCI: begin
@@ -399,24 +387,16 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                     csr_write_value = csr_read_value & (~csr_immediate);
                                 end
                             end else begin
-                                trap = 1;
-                                interrupt = 0;
-                                exception_code = EXCEPTION_CODE_ILLEGAL_INSTRUCTION;
+                                raise_illegal_instruction_exception();
                             end
                         end
                         default: begin end
                     endcase
                 end
                 default: begin
-                    trap = 1;
-                    interrupt = 0;
-                    exception_code = EXCEPTION_CODE_ILLEGAL_INSTRUCTION;
+                    raise_illegal_instruction_exception();
                 end
             endcase
-        end
-
-        if (trap) begin
-            next_program_counter = { control_status_registers.base, 2'b0 };
         end
     end
 
@@ -426,6 +406,17 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         load_register <= pending_load_register;
         load_funct3 <= pending_load_funct3;
     end
+
+    task raise_exception(input _interrupt, input [30:0] _exception_code);
+        trap = 1;
+        interrupt = _interrupt;
+        exception_code = _exception_code;
+        next_program_counter = { control_status_registers.base, 2'b0 };
+    endtask
+
+    task raise_illegal_instruction_exception;
+        raise_exception(0, EXCEPTION_CODE_ILLEGAL_INSTRUCTION);
+    endtask
 
     `ifdef simulation
         always @* begin
