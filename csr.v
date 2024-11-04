@@ -245,57 +245,48 @@ module csr(clock, address, read_value, write_value, write_enable);
             mcause_interrupt <= core.interrupt;
             mepc <= core.program_counter[31:2];
         end else if (write_enable) begin
-            if (address[11:10] == 2'b11) begin
-                // CSR is read-only
-                // there is a transription error in the CSR address range
-                // table in old revisions of the current spec version, all
-                // addresses like this are read-only, this has since been
-                // fixed
-                // TODO raise illegal-instruction exception
-            end else begin
-                case (address)
-                    ADDRESS_MSTATUS: begin
-                        mstatus_mie <= write_value[3];
-                        mstatus_mpie <= write_value[7];
-                    end
-                    ADDRESS_MTVEC: begin
-                        base <= write_value[31:2];
-                    end
-                    ADDRESS_MIP: begin
-                        // all are read-only
-                    end
-                    ADDRESS_MIE: begin
-                        // this could be read-only, TODO consider
-                        mie_msie <= write_value[3];
-                        mie_mtie <= write_value[7];
-                        mie_meie <= write_value[11];
-                    end
-                    ADDRESS_MCYCLE: begin
-                        mcycle[31:0] <= write_value;
-                    end
-                    ADDRESS_MCYCLEH: begin
-                        mcycle[63:32] <= write_value;
-                    end
-                    ADDRESS_MINSTRET: begin
-                        minstret[31:0] <= write_value;
-                    end
-                    ADDRESS_MINSTRETH: begin
-                        minstret[63:32] <= write_value;
-                    end
-                    ADDRESS_MSCRATCH: begin
-                        mscratch <= write_value;
-                    end
-                    ADDRESS_MEPC: begin
-                        mepc <= write_value[31:2];
-                    end
-                    ADDRESS_MCAUSE: begin
-                        mcause_interrupt <= write_value[31];
-                        mcause_exception_code <= write_value[30:0];
-                    end
-                    default: begin
-                    end
-                endcase
-            end
+            case (address)
+                ADDRESS_MSTATUS: begin
+                    mstatus_mie <= write_value[3];
+                    mstatus_mpie <= write_value[7];
+                end
+                ADDRESS_MTVEC: begin
+                    base <= write_value[31:2];
+                end
+                ADDRESS_MIP: begin
+                    // all are read-only
+                end
+                ADDRESS_MIE: begin
+                    // this could be read-only, TODO consider
+                    mie_msie <= write_value[3];
+                    mie_mtie <= write_value[7];
+                    mie_meie <= write_value[11];
+                end
+                ADDRESS_MCYCLE: begin
+                    mcycle[31:0] <= write_value;
+                end
+                ADDRESS_MCYCLEH: begin
+                    mcycle[63:32] <= write_value;
+                end
+                ADDRESS_MINSTRET: begin
+                    minstret[31:0] <= write_value;
+                end
+                ADDRESS_MINSTRETH: begin
+                    minstret[63:32] <= write_value;
+                end
+                ADDRESS_MSCRATCH: begin
+                    mscratch <= write_value;
+                end
+                ADDRESS_MEPC: begin
+                    mepc <= write_value[31:2];
+                end
+                ADDRESS_MCAUSE: begin
+                    mcause_interrupt <= write_value[31];
+                    mcause_exception_code <= write_value[30:0];
+                end
+                default: begin
+                end
+            endcase
         end
     end
 

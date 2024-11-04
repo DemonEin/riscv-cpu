@@ -85,6 +85,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     wire [4:0] register_read_address_1, register_read_address_2, rd;
     wire [2:0] funct3;
     wire comparator_result;
+    wire csr_is_read_only;
 
     reg [31:0] program_counter, register_write_value_1, register_write_value_2, register_read_value_1, register_read_value_2, alu_operand_1, alu_operand_2, comparator_operand_1, comparator_operand_2, csr_write_value;
     initial program_counter = `INITIAL_PROGRAM_COUNTER;
@@ -126,6 +127,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     assign register_read_address_2 = instruction[24:20];
     assign rd = instruction[11:7];
     assign csr = instruction[31:20];
+    assign csr_is_read_only = csr[11:10] == 2'b11;
 
     assign next_instruction_address = program_counter + 4;
 
@@ -313,53 +315,89 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                             endcase
                         end
                         FUNCT3_CSRRW: begin
-                            csr_address = csr;
-                            register_write_address_1 = rd;
-                            register_write_value_1 = csr_read_value;
-                            csr_write_enable = 1;
-                            csr_write_value = register_read_value_1;
+                            if (!csr_is_read_only) begin
+                                csr_address = csr;
+                                register_write_address_1 = rd;
+                                register_write_value_1 = csr_read_value;
+                                csr_write_enable = 1;
+                                csr_write_value = register_read_value_1;
+                            end else begin
+                                trap = 1;
+                                interrupt = 0;
+                                exception_code = EXCEPTION_CODE_ILLEGAL_INSTRUCTION;
+                            end
                         end
                         FUNCT3_CSRRS: begin
-                            csr_address = csr;
-                            register_write_address_1 = rd;
-                            register_write_value_1 = csr_read_value;
-                            if (register_read_address_1 != 0) begin
-                                csr_write_enable = 1;
-                                csr_write_value = csr_read_value | register_read_value_1;
+                            if (!(csr_is_read_only && register_read_address_1 != 0)) begin
+                                csr_address = csr;
+                                register_write_address_1 = rd;
+                                register_write_value_1 = csr_read_value;
+                                if (register_read_address_1 != 0) begin
+                                    csr_write_enable = 1;
+                                    csr_write_value = csr_read_value | register_read_value_1;
+                                end
+                            end else begin
+                                trap = 1;
+                                interrupt = 0;
+                                exception_code = EXCEPTION_CODE_ILLEGAL_INSTRUCTION;
                             end
                         end
                         FUNCT3_CSRRC: begin
-                            csr_address = csr;
-                            register_write_address_1 = rd;
-                            register_write_value_1 = csr_read_value;
-                            if (register_read_address_1 != 0) begin
-                                csr_write_enable = 1;
-                                csr_write_value = csr_read_value & (~register_read_value_1);
+                            if (!(csr_is_read_only && register_read_address_1 != 0)) begin
+                                csr_address = csr;
+                                register_write_address_1 = rd;
+                                register_write_value_1 = csr_read_value;
+                                if (register_read_address_1 != 0) begin
+                                    csr_write_enable = 1;
+                                    csr_write_value = csr_read_value & (~register_read_value_1);
+                                end
+                            end else begin
+                                trap = 1;
+                                interrupt = 0;
+                                exception_code = EXCEPTION_CODE_ILLEGAL_INSTRUCTION;
                             end
                         end
                         FUNCT3_CSRRWI: begin
-                            csr_address = csr;
-                            register_write_address_1 = rd;
-                            register_write_value_1 = csr_read_value;
-                            csr_write_enable = 1;
-                            csr_write_value = csr_immediate;
+                            if (!csr_is_read_only) begin
+                                csr_address = csr;
+                                register_write_address_1 = rd;
+                                register_write_value_1 = csr_read_value;
+                                csr_write_enable = 1;
+                                csr_write_value = csr_immediate;
+                            end else begin
+                                trap = 1;
+                                interrupt = 0;
+                                exception_code = EXCEPTION_CODE_ILLEGAL_INSTRUCTION;
+                            end
                         end
                         FUNCT3_CSRRSI: begin
-                            csr_address = csr;
-                            register_write_address_1 = rd;
-                            register_write_value_1 = csr_read_value;
-                            if (csr_immediate != 0) begin
-                                csr_write_enable = 1;
-                                csr_write_value = csr_read_value | csr_immediate;
+                            if (!(csr_is_read_only && register_read_address_1 != 0)) begin
+                                csr_address = csr;
+                                register_write_address_1 = rd;
+                                register_write_value_1 = csr_read_value;
+                                if (csr_immediate != 0) begin
+                                    csr_write_enable = 1;
+                                    csr_write_value = csr_read_value | csr_immediate;
+                                end
+                            end else begin
+                                trap = 1;
+                                interrupt = 0;
+                                exception_code = EXCEPTION_CODE_ILLEGAL_INSTRUCTION;
                             end
                         end
                         FUNCT3_CSRRCI: begin
-                            csr_address = csr;
-                            register_write_address_1 = rd;
-                            register_write_value_1 = csr_read_value;
-                            if (csr_immediate != 0) begin
-                                csr_write_enable = 1;
-                                csr_write_value = csr_read_value & (~csr_immediate);
+                            if (!(csr_is_read_only && register_read_address_1 != 0)) begin
+                                csr_address = csr;
+                                register_write_address_1 = rd;
+                                register_write_value_1 = csr_read_value;
+                                if (csr_immediate != 0) begin
+                                    csr_write_enable = 1;
+                                    csr_write_value = csr_read_value & (~csr_immediate);
+                                end
+                            end else begin
+                                trap = 1;
+                                interrupt = 0;
+                                exception_code = EXCEPTION_CODE_ILLEGAL_INSTRUCTION;
                             end
                         end
                         default: begin end
@@ -369,9 +407,12 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                     trap = 1;
                     interrupt = 0;
                     exception_code = EXCEPTION_CODE_ILLEGAL_INSTRUCTION;
-                    next_program_counter = { control_status_registers.base, 2'b0 };
                 end
             endcase
+        end
+
+        if (trap) begin
+            next_program_counter = { control_status_registers.base, 2'b0 };
         end
     end
 
