@@ -67,6 +67,8 @@ localparam ALU_OPCODE_RIGHT_SHIFT_ARITHMETIC = { 1'b1, FUNCT3_SRA };
 localparam ALU_OPCODE_OR = { 1'b0, FUNCT3_OR };
 localparam ALU_OPCODE_AND = { 1'b0, FUNCT3_AND };
 
+localparam EXCEPTION_CODE_ILLEGAL_INSTRUCTION = 31'd2;
+
 module core(clock, next_program_counter, program_memory_value, memory_address, memory_write_value, memory_write_sections, memory_read_value);
 
     input clock;
@@ -94,6 +96,9 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     reg [2:0] comparator_opcode, load_funct3, pending_load_funct3;
     reg csr_write_enable;
 
+    reg trap;
+    reg interrupt;
+    reg [30:0] exception_code;
     reg stall = 1;
 
     `ifdef simulation
@@ -151,6 +156,10 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
 
         register_read_value_1 = base_register_read_value_1;
         register_read_value_2 = base_register_read_value_2;
+
+        trap = 1'b0;
+        interrupt = 1'bx;
+        exception_code = 31'bx;
 
         next_program_counter = program_counter;
 
@@ -358,8 +367,12 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                         default: begin end
                     endcase
                 end
-                // to avoid a synthesizer warning for incomplete case
-                default: begin end
+                default: begin
+                    trap = 1;
+                    interrupt = 0;
+                    exception_code = EXCEPTION_CODE_ILLEGAL_INSTRUCTION;
+                    next_program_counter = { control_status_registers.base, 2'b0 };
+                end
             endcase
         end
     end

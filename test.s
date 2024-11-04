@@ -3,6 +3,10 @@ string:
 .ascii "hello"
 
 .align 4
+bad_instruction:
+.4byte 0xFFFFFFFF
+
+.align 4
 .global _start
 _start:
     lb x1, string + 2
@@ -61,8 +65,29 @@ _start:
     csrrw x2, mscratch, x0
     bne x1, x2, fail
 
+    lui a0, %hi(trap)
+    addi a0, a0, %lo(trap)
+    csrrw x0, mtvec, a0
+    j bad_instruction
+return_from_bad_instruction:
+
     # pass test
     ecall
 
 fail:
     ebreak
+
+.align 4
+trap:
+    csrrw x1, mcause, x0
+    li x2, 2
+    beq x1, x2, illegal_instruction
+    ebreak
+    j return_from_bad_instruction
+
+illegal_instruction:
+    lui a0, %hi(bad_instruction)
+    addi a0, a0, %lo(bad_instruction)
+    csrrw a1, mepc, zero
+    bne a1, a0, fail
+    j return_from_bad_instruction

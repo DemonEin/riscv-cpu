@@ -240,7 +240,11 @@ module csr(clock, address, read_value, write_value, write_enable);
     end
 
     always @(posedge clock) begin
-        if (write_enable) begin
+        if (core.trap) begin
+            mcause_exception_code <= core.exception_code;
+            mcause_interrupt <= core.interrupt;
+            mepc <= core.program_counter[31:2];
+        end else if (write_enable) begin
             if (address[11:10] == 2'b11) begin
                 // CSR is read-only
                 // there is a transription error in the CSR address range
