@@ -65,6 +65,16 @@ _start:
     csrrw x2, mscratch, x0
     bne x1, x2, fail
 
+    li x1, 0
+    csrrw x0, minstreth, x1
+    csrrw x0, minstret, x1
+    nop
+    nop
+    nop
+    csrrw x1, minstret, x0
+    li x2, 3
+    bne x1, x2, fail
+
     lui a0, %hi(trap)
     addi a0, a0, %lo(trap)
     csrrw x0, mtvec, a0
