@@ -171,6 +171,8 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                 FUNCT3_LHU: register_write_value_2 = { 16'b0, memory_read_value[15:0] };
                 FUNCT3_LB: register_write_value_2 = { {24{memory_read_value[7]}}, memory_read_value[7:0] };
                 FUNCT3_LBU: register_write_value_2 = { 24'b0, memory_read_value[7:0] };
+                // will not happen due to error checking performed when the
+                // instruction was decoded
                 default: register_write_value_2 = 32'bx;
             endcase
             // these are so that the load is reflected in the instruction
@@ -226,26 +228,34 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                     register_write_value_1 = next_instruction_address;
                 end
                 OPCODE_BRANCH: begin
-                    comparator_opcode = funct3;
-                    comparator_operand_1 = register_read_value_1;
-                    comparator_operand_2 = register_read_value_2;
+                    if (funct3 == 3'b010 || funct3 == 'b011) begin
+                        raise_illegal_instruction_exception();
+                    end else begin
+                        comparator_opcode = funct3;
+                        comparator_operand_1 = register_read_value_1;
+                        comparator_operand_2 = register_read_value_2;
 
-                    alu_opcode = ALU_OPCODE_ADD;
-                    alu_operand_1 = program_counter;
-                    alu_operand_2 = b_immediate;
+                        alu_opcode = ALU_OPCODE_ADD;
+                        alu_operand_1 = program_counter;
+                        alu_operand_2 = b_immediate;
 
-                    if (comparator_result) begin
-                        next_program_counter = alu_result;
+                        if (comparator_result) begin
+                            next_program_counter = alu_result;
+                        end
                     end
                 end
                 OPCODE_LOAD: begin
-                    alu_opcode = ALU_OPCODE_ADD;
-                    alu_operand_1 = register_read_value_1;
-                    alu_operand_2 = i_immediate;
-                    memory_address = alu_result;
+                    if (funct3 == 3'b011 || funct3 == 3'b110 || funct3 == 3'b111) begin
+                        raise_illegal_instruction_exception();
+                    end else begin
+                        alu_opcode = ALU_OPCODE_ADD;
+                        alu_operand_1 = register_read_value_1;
+                        alu_operand_2 = i_immediate;
+                        memory_address = alu_result;
 
-                    pending_load_register = rd;
-                    pending_load_funct3 = funct3;
+                        pending_load_register = rd;
+                        pending_load_funct3 = funct3;
+                    end
                 end
                 OPCODE_STORE: begin
                     alu_opcode = ALU_OPCODE_ADD;
@@ -258,10 +268,17 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                         FUNCT3_SW: memory_write_sections = 3'b111;
                         FUNCT3_SH: memory_write_sections = 3'b011;
                         FUNCT3_SB: memory_write_sections = 3'b001;
-                        default: memory_write_sections = 3'bx;
+                        // this could be raised earlier to avoid specifying
+                        // values that aren't needed but there are fewer
+                        // cells in the synthesized netlist by putting it here
+                        // and the code is simpler; this may complicate
+                        // the netlist with future changes so that should be
+                        // checked later
+                        default: raise_illegal_instruction_exception();
                     endcase
                 end
                 OPCODE_IMMEDIATE: begin
+                    // all funct3 values are valid here
                     if (funct3 == FUNCT3_SLL || funct3 == FUNCT3_SRL || funct3 == FUNCT3_SRA) begin
                         alu_opcode = { instruction[30], funct3 };
                     end else begin
@@ -282,6 +299,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                     end
                 end
                 OPCODE_ARITHMETIC: begin
+                    // all funct3 values are valid here
                     alu_opcode = { instruction[30], funct3 };
                     alu_operand_1 = register_read_value_1;
                     alu_operand_2 = register_read_value_2;
@@ -390,7 +408,9 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                 raise_illegal_instruction_exception();
                             end
                         end
-                        default: begin end
+                        default: begin 
+                            raise_illegal_instruction_exception();
+                        end
                     endcase
                 end
                 default: begin
