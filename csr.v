@@ -68,6 +68,7 @@ module csr(clock, address, read_value, write_value, write_enable);
     reg mie_msie;
 
     reg [63:0] mcycle;
+    initial mcycle = 0;
     reg [63:0] minstret;
 
     reg [31:0] mscratch;
@@ -77,6 +78,9 @@ module csr(clock, address, read_value, write_value, write_enable);
 
     reg mcause_interrupt;
     reg [30:0] mcause_exception_code;
+
+    wire [63:0] next_mcycle;
+    assign next_mcycle = mcycle + 1;
 
     wire [63:0] menvcfg = {
         1'b0 /* STCE */,
@@ -262,12 +266,6 @@ module csr(clock, address, read_value, write_value, write_enable);
                     mie_mtie <= write_value[7];
                     mie_meie <= write_value[11];
                 end
-                ADDRESS_MCYCLE: begin
-                    mcycle[31:0] <= write_value;
-                end
-                ADDRESS_MCYCLEH: begin
-                    mcycle[63:32] <= write_value;
-                end
                 ADDRESS_MINSTRET: begin
                     minstret[31:0] <= write_value;
                 end
@@ -287,6 +285,16 @@ module csr(clock, address, read_value, write_value, write_enable);
                 default: begin
                 end
             endcase
+        end
+
+        if (write_enable) begin
+            case (address)
+                ADDRESS_MCYCLE: mcycle[31:0] <= write_value;
+                ADDRESS_MCYCLEH: mcycle[63:32] <= write_value;
+                default: mcycle <= next_mcycle;
+            endcase
+        end else begin
+            mcycle <= next_mcycle;
         end
     end
 
