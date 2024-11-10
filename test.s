@@ -75,6 +75,21 @@ _start:
     li x2, 3
     bne x1, x2, fail
 
+    li x3, 0
+    li x2, 0x80000000
+    sw x0, 0(x2)
+    # assuming this many nops will increment mtime
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    lw x3, 0(x2)
+    beq x0, x3, fail
+
     lui a0, %hi(trap)
     addi a0, a0, %lo(trap)
     csrrw x0, mtvec, a0
