@@ -47,6 +47,7 @@ module csr(clock, address, read_value, write_value, write_enable);
 
     // machine interrupt enable
     reg mstatus_mie;
+    // machine prior interrupt enable
     reg mstatus_mpie;
 
     reg [29:0] base;
@@ -252,6 +253,11 @@ module csr(clock, address, read_value, write_value, write_enable);
             mcause_exception_code <= core.exception_code;
             mcause_interrupt <= core.interrupt;
             mepc <= core.program_counter[31:2];
+            mstatus_mpie <= mstatus_mie;
+            mstatus_mie <= 0;
+        end else if (core.return_from_trap) begin
+            mstatus_mie <= mstatus_mpie;
+            mstatus_mpie <= 1;
         end else if (write_enable) begin
             case (address)
                 ADDRESS_MSTATUS: begin

@@ -93,6 +93,10 @@ _start:
     lui a0, %hi(trap)
     addi a0, a0, %lo(trap)
     csrrw x0, mtvec, a0
+
+unimp_test:
+    unimp
+
     j bad_instruction
 return_from_bad_instruction:
 
@@ -113,6 +117,20 @@ trap:
 illegal_instruction:
     lui a0, %hi(bad_instruction)
     addi a0, a0, %lo(bad_instruction)
-    csrrw a1, mepc, zero
-    bne a1, a0, fail
+    csrrs a1, mepc, zero
+    beq a1, a0, got_bad_instruction
+
+    lui a0, %hi(unimp_test)
+    addi a0, a0, %lo(unimp_test)
+    beq a1, a0, got_unimp_test
+
+    j fail
+
+got_bad_instruction:
     j return_from_bad_instruction
+
+got_unimp_test:
+    csrrw t0, mepc, zero
+    addi t0, t0, 4
+    csrrw zero, mepc, t0
+    mret
