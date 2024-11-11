@@ -66,8 +66,8 @@ localparam ALU_OPCODE_RIGHT_SHIFT_ARITHMETIC = { 1'b1, FUNCT3_SRA };
 localparam ALU_OPCODE_OR = { 1'b0, FUNCT3_OR };
 localparam ALU_OPCODE_AND = { 1'b0, FUNCT3_AND };
 
-localparam EXCEPTION_CODE_ILLEGAL_INSTRUCTION = 31'd2;
-localparam EXCEPTION_CODE_MACHINE_TIMER_INTERRUPT = 31'd7;
+localparam MCAUSE_ILLEGAL_INSTRUCTION = 2;
+localparam MCAUSE_MACHINE_TIMER_INTERRUPT = (1 << 31) | 7;
 
 module core(clock, next_program_counter, program_memory_value, memory_address, memory_write_value, memory_write_sections, memory_read_value);
 
@@ -98,8 +98,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     reg csr_write_enable;
 
     reg trap;
-    reg interrupt;
-    reg [30:0] exception_code;
+    reg [31:0] mcause;
     reg return_from_trap;
     reg stall = 1;
 
@@ -161,8 +160,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         register_read_value_2 = base_register_read_value_2;
 
         trap = 1'b0;
-        interrupt = 1'bx;
-        exception_code = 31'bx;
+        mcause = 32'bx;
         return_from_trap = 1'b0;
 
         next_program_counter = program_counter;
@@ -194,7 +192,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         end
 
         if (control_status_registers.mstatus_mie && control_status_registers.mie_mtie && control_status_registers.mip_mtip) begin
-            raise_exception(1, EXCEPTION_CODE_MACHINE_TIMER_INTERRUPT);
+            raise(MCAUSE_MACHINE_TIMER_INTERRUPT);
         end else if (!stall) begin
             next_program_counter = next_instruction_address;
 
@@ -235,7 +233,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                 end
                 OPCODE_BRANCH: begin
                     if (funct3 == 3'b010 || funct3 == 'b011) begin
-                        raise_illegal_instruction_exception();
+                        raise(MCAUSE_ILLEGAL_INSTRUCTION);
                     end else begin
                         comparator_opcode = funct3;
                         comparator_operand_1 = register_read_value_1;
@@ -252,7 +250,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                 end
                 OPCODE_LOAD: begin
                     if (funct3 == 3'b011 || funct3 == 3'b110 || funct3 == 3'b111) begin
-                        raise_illegal_instruction_exception();
+                        raise(MCAUSE_ILLEGAL_INSTRUCTION);
                     end else begin
                         alu_opcode = ALU_OPCODE_ADD;
                         alu_operand_1 = register_read_value_1;
@@ -280,7 +278,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                         // and the code is simpler; this may complicate
                         // the netlist with future changes so that should be
                         // checked later
-                        default: raise_illegal_instruction_exception();
+                        default: raise(MCAUSE_ILLEGAL_INSTRUCTION);
                     endcase
                 end
                 OPCODE_IMMEDIATE: begin
@@ -340,7 +338,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                     next_program_counter = { control_status_registers.mepc, 2'b0 };
                                 end
                                 default: begin
-                                    raise_illegal_instruction_exception();
+                                    raise(MCAUSE_ILLEGAL_INSTRUCTION);
                                 end
                             endcase
                         end
@@ -352,7 +350,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                 csr_write_enable = 1;
                                 csr_write_value = register_read_value_1;
                             end else begin
-                                raise_illegal_instruction_exception();
+                                raise(MCAUSE_ILLEGAL_INSTRUCTION);
                             end
                         end
                         FUNCT3_CSRRS: begin
@@ -365,7 +363,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                     csr_write_value = csr_read_value | register_read_value_1;
                                 end
                             end else begin
-                                raise_illegal_instruction_exception();
+                                raise(MCAUSE_ILLEGAL_INSTRUCTION);
                             end
                         end
                         FUNCT3_CSRRC: begin
@@ -378,7 +376,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                     csr_write_value = csr_read_value & (~register_read_value_1);
                                 end
                             end else begin
-                                raise_illegal_instruction_exception();
+                                raise(MCAUSE_ILLEGAL_INSTRUCTION);
                             end
                         end
                         FUNCT3_CSRRWI: begin
@@ -389,7 +387,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                 csr_write_enable = 1;
                                 csr_write_value = csr_immediate;
                             end else begin
-                                raise_illegal_instruction_exception();
+                                raise(MCAUSE_ILLEGAL_INSTRUCTION);
                             end
                         end
                         FUNCT3_CSRRSI: begin
@@ -402,7 +400,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                     csr_write_value = csr_read_value | csr_immediate;
                                 end
                             end else begin
-                                raise_illegal_instruction_exception();
+                                raise(MCAUSE_ILLEGAL_INSTRUCTION);
                             end
                         end
                         FUNCT3_CSRRCI: begin
@@ -415,16 +413,16 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                     csr_write_value = csr_read_value & (~csr_immediate);
                                 end
                             end else begin
-                                raise_illegal_instruction_exception();
+                                raise(MCAUSE_ILLEGAL_INSTRUCTION);
                             end
                         end
                         default: begin 
-                            raise_illegal_instruction_exception();
+                            raise(MCAUSE_ILLEGAL_INSTRUCTION);
                         end
                     endcase
                 end
                 default: begin
-                    raise_illegal_instruction_exception();
+                    raise(MCAUSE_ILLEGAL_INSTRUCTION);
                 end
             endcase
         end
@@ -437,15 +435,10 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         load_funct3 <= pending_load_funct3;
     end
 
-    task raise_exception(input _interrupt, input [30:0] _exception_code);
+    task raise(input [31:0] _mcause);
         trap = 1;
-        interrupt = _interrupt;
-        exception_code = _exception_code;
+        mcause = _mcause;
         next_program_counter = { control_status_registers.base, 2'b0 };
-    endtask
-
-    task raise_illegal_instruction_exception;
-        raise_exception(0, EXCEPTION_CODE_ILLEGAL_INSTRUCTION);
     endtask
 
     `ifdef simulation

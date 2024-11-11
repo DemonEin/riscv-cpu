@@ -80,8 +80,7 @@ module csr(clock, address, read_value, write_value, write_enable);
     // machine exception program counter
     reg [29:0] mepc;
 
-    reg mcause_interrupt;
-    reg [30:0] mcause_exception_code;
+    reg [31:0] mcause;
 
     wire [63:0] next_mcycle;
     assign next_mcycle = mcycle + 1;
@@ -223,7 +222,7 @@ module csr(clock, address, read_value, write_value, write_enable);
                 read_value = { mepc, 2'b0 };
             end
             ADDRESS_MCAUSE: begin
-                read_value = { mcause_interrupt, mcause_exception_code };
+                read_value = mcause;
             end
             ADDRESS_MTVAL: begin
                 read_value = 0;
@@ -252,8 +251,7 @@ module csr(clock, address, read_value, write_value, write_enable);
 
     always @(posedge clock) begin
         if (core.trap) begin
-            mcause_exception_code <= core.exception_code;
-            mcause_interrupt <= core.interrupt;
+            mcause <= core.mcause;
             mepc <= core.program_counter[31:2];
             mstatus_mpie <= mstatus_mie;
             mstatus_mie <= 0;
@@ -285,8 +283,7 @@ module csr(clock, address, read_value, write_value, write_enable);
                     mepc <= write_value[31:2];
                 end
                 ADDRESS_MCAUSE: begin
-                    mcause_interrupt <= write_value[31];
-                    mcause_exception_code <= write_value[30:0];
+                    mcause <= write_value;
                 end
                 default: begin
                 end
