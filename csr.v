@@ -46,7 +46,7 @@ module csr(clock, address, read_value, write_value, write_enable);
     output reg [31:0] read_value;
 
     // machine interrupt enable
-    reg mstatus_mie;
+    reg mstatus_mie = 0;
     // machine prior interrupt enable
     reg mstatus_mpie;
 
@@ -56,7 +56,9 @@ module csr(clock, address, read_value, write_value, write_enable);
     // machine external interrupt pending
     reg mip_meip;
     // machine timer interrupt pending
-    reg mip_mtip;
+    wire mip_mtip;
+    assign mip_mtip = top.mtime >= top.mtimecmp;
+
     // machine software interrupt pending
     reg mip_msip;
 

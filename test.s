@@ -94,6 +94,23 @@ _start:
     addi a0, a0, %lo(trap)
     csrrw x0, mtvec, a0
 
+    li x1, 0x80000008 # mtimercmp
+    sw zero, 0(x1)
+    li x2, 0x8000000c # mtimercmph
+    sw zero, 0(x2)
+    li x31, 0
+    # assume mtime > 0
+    # enable all interrupts
+    li t0, 0xFFFFFF
+    csrrs zero, mie, t0
+    li t0, 0b1000
+    li t1, 1
+    # this should result in a timer interrupt
+    csrrs zero, mstatus, t0
+    bne x31, t1, fail
+    li t0, 0xFFFFFFFF
+    csrrc zero, mie, t0
+
 unimp_test:
     unimp
 
@@ -111,6 +128,8 @@ trap:
     csrrw x1, mcause, x0
     li x2, 2
     beq x1, x2, illegal_instruction
+    li x2, ((1 << 31) | 7)
+    beq x1, x2, timer_interrupt
     ebreak
     j return_from_bad_instruction
 
@@ -133,4 +152,11 @@ got_unimp_test:
     csrrw t0, mepc, zero
     addi t0, t0, 4
     csrrw zero, mepc, t0
+    mret
+
+timer_interrupt:
+    li x31, 1
+    li x30, 0xFFFFFFFF
+    li x29, 0x8000000c # mtimercmph
+    sw x30, 0(x29)
     mret

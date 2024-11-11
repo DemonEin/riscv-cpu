@@ -67,6 +67,7 @@ localparam ALU_OPCODE_OR = { 1'b0, FUNCT3_OR };
 localparam ALU_OPCODE_AND = { 1'b0, FUNCT3_AND };
 
 localparam EXCEPTION_CODE_ILLEGAL_INSTRUCTION = 31'd2;
+localparam EXCEPTION_CODE_MACHINE_TIMER_INTERRUPT = 31'd7;
 
 module core(clock, next_program_counter, program_memory_value, memory_address, memory_write_value, memory_write_sections, memory_read_value);
 
@@ -192,7 +193,9 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
             register_write_value_2 = 32'bx;
         end
 
-        if (!stall) begin
+        if (control_status_registers.mstatus_mie && control_status_registers.mie_mtie && control_status_registers.mip_mtip) begin
+            raise_exception(1, EXCEPTION_CODE_MACHINE_TIMER_INTERRUPT);
+        end else if (!stall) begin
             next_program_counter = next_instruction_address;
 
             case(opcode)
