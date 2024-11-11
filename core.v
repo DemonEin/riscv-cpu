@@ -54,6 +54,7 @@ localparam FUNCT3_CSRRCI = 3'b111;
 localparam FUNC12_ECALL = 12'b0;
 localparam FUNC12_EBREAK = 12'b1;
 localparam FUNC12_MRET = 12'b001100000010;
+localparam FUNC12_WFI = 12'b000100000101;
 
 // the bit at index 3 is the bit at index 30 in the corresponding instruction
 // logic to produce the alu opcode relies on these being defined this way
@@ -336,6 +337,9 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                 FUNC12_MRET: begin
                                     return_from_trap = 1;
                                     next_program_counter = { control_status_registers.mepc, 2'b0 };
+                                end
+                                FUNC12_WFI: begin
+                                    // nop
                                 end
                                 default: begin
                                     raise(MCAUSE_ILLEGAL_INSTRUCTION);
