@@ -117,11 +117,11 @@ unimp_test:
     j bad_instruction
 return_from_bad_instruction:
 
-    # pass test
-    ecall
+pass:
+    .insn 0x8c000073 # custom instruction to pass test
 
 fail:
-    ebreak
+    .insn 0xcc000073 # custom instruction to fail test
 
 .align 4
 trap:
@@ -130,8 +130,7 @@ trap:
     beq x1, x2, illegal_instruction
     li x2, ((1 << 31) | 7)
     beq x1, x2, timer_interrupt
-    ebreak
-    j return_from_bad_instruction
+    j fail
 
 illegal_instruction:
     lui a0, %hi(bad_instruction)

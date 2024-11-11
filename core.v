@@ -56,6 +56,11 @@ localparam FUNC12_EBREAK = 12'b1;
 localparam FUNC12_MRET = 12'b001100000010;
 localparam FUNC12_WFI = 12'b000100000101;
 
+`ifdef simulation
+localparam FUNC12_TEST_PASS = 12'b100011000000;
+localparam FUNC12_TEST_FAIL = 12'b110011000000;
+`endif
+
 // the bit at index 3 is the bit at index 30 in the corresponding instruction
 // logic to produce the alu opcode relies on these being defined this way
 localparam ALU_OPCODE_ADD = { 1'b0, FUNCT3_ADD };
@@ -68,6 +73,8 @@ localparam ALU_OPCODE_OR = { 1'b0, FUNCT3_OR };
 localparam ALU_OPCODE_AND = { 1'b0, FUNCT3_AND };
 
 localparam MCAUSE_ILLEGAL_INSTRUCTION = 2;
+localparam MCAUSE_BREAKPOINT = 3;
+localparam MCAUSE_ENVIRONMENT_CALL_FROM_M_MODE = 11;
 localparam MCAUSE_MACHINE_TIMER_INTERRUPT = (1 << 31) | 7;
 
 module core(clock, next_program_counter, program_memory_value, memory_address, memory_write_value, memory_write_sections, memory_read_value);
@@ -326,14 +333,10 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                             if (register_read_address_1 == 0 && rd == 0) begin
                                 case (func12)
                                     FUNC12_ECALL: begin
-                                        `ifdef simulation
-                                            finish = 1;
-                                        `endif
+                                        raise(MCAUSE_ENVIRONMENT_CALL_FROM_M_MODE);
                                     end
                                     FUNC12_EBREAK: begin
-                                        `ifdef simulation
-                                            error = 1'b1;
-                                        `endif
+                                        raise(MCAUSE_BREAKPOINT);
                                     end
                                     FUNC12_MRET: begin
                                         return_from_trap = 1;
@@ -342,6 +345,15 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                     FUNC12_WFI: begin
                                         // nop
                                     end
+                                    `ifdef simulation 
+                                        // custom instructions for running tests
+                                        FUNC12_TEST_PASS: begin
+                                            finish = 1; 
+                                        end
+                                        FUNC12_TEST_FAIL: begin
+                                            error = 1;
+                                        end
+                                    `endif
                                     default: begin
                                         raise(MCAUSE_ILLEGAL_INSTRUCTION);
                                     end
