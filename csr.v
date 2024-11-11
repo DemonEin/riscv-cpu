@@ -86,7 +86,7 @@ module csr(clock, address, read_value, write_value, write_enable);
     assign next_mcycle = mcycle + 1;
 
     wire [63:0] next_minstret;
-    assign next_minstret = core.stall ? minstret : minstret + 1;
+    assign next_minstret = core.stall || core.trap ? minstret : minstret + 1;
 
     wire [63:0] menvcfg = {
         1'b0 /* STCE */,
