@@ -323,28 +323,32 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                 OPCODE_SYSTEM: begin
                     case (funct3)
                         FUNCT3_PRIV: begin
-                            case (func12)
-                                FUNC12_ECALL: begin
-                                    `ifdef simulation
-                                        finish = 1;
-                                    `endif
-                                end
-                                FUNC12_EBREAK: begin
-                                    `ifdef simulation
-                                        error = 1'b1;
-                                    `endif
-                                end
-                                FUNC12_MRET: begin
-                                    return_from_trap = 1;
-                                    next_program_counter = { control_status_registers.mepc, 2'b0 };
-                                end
-                                FUNC12_WFI: begin
-                                    // nop
-                                end
-                                default: begin
-                                    raise(MCAUSE_ILLEGAL_INSTRUCTION);
-                                end
-                            endcase
+                            if (register_read_address_1 == 0 && rd == 0) begin
+                                case (func12)
+                                    FUNC12_ECALL: begin
+                                        `ifdef simulation
+                                            finish = 1;
+                                        `endif
+                                    end
+                                    FUNC12_EBREAK: begin
+                                        `ifdef simulation
+                                            error = 1'b1;
+                                        `endif
+                                    end
+                                    FUNC12_MRET: begin
+                                        return_from_trap = 1;
+                                        next_program_counter = { control_status_registers.mepc, 2'b0 };
+                                    end
+                                    FUNC12_WFI: begin
+                                        // nop
+                                    end
+                                    default: begin
+                                        raise(MCAUSE_ILLEGAL_INSTRUCTION);
+                                    end
+                                endcase
+                            end else begin
+                                raise(MCAUSE_ILLEGAL_INSTRUCTION);
+                            end
                         end
                         FUNCT3_CSRRW: begin
                             if (!csr_is_read_only) begin
