@@ -80,7 +80,7 @@ module csr(clock, address, read_value, write_value, write_enable);
     // machine exception program counter
     reg [29:0] mepc;
 
-    reg [31:0] mcause;
+    reg [31:0] mcause = 0;
 
     wire [63:0] next_mcycle;
     assign next_mcycle = mcycle + 1;
