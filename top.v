@@ -4,6 +4,7 @@ localparam ADDRESS_MTIME = 32'h80000000;
 localparam ADDRESS_MTIMEH = ADDRESS_MTIME + 4;
 localparam ADDRESS_MTIMECMP = ADDRESS_MTIMEH + 4;
 localparam ADDRESS_MTIMECMPH = ADDRESS_MTIMECMP + 4;
+localparam ADDRESS_LED = ADDRESS_MTIMECMPH + 4;
 
 module top(
     input clk48,
@@ -43,12 +44,6 @@ module top(
     assign rgb_led0_r = ~led_on;
     assign rgb_led0_g = ~led_on;
     assign rgb_led0_b = ~led_on;
-
-    always @(posedge clk24) begin
-        if (memory_write_sections != 0) begin
-            led_on <= memory_write_value != 0;
-        end
-    end
 
     assign unshifted_memory_read_value = read_memory_mapped_register ? memory_mapped_register_read_value : block_ram_read_value;
     // these shifts work due to requiring natural alignment of memory accesses
@@ -144,6 +139,10 @@ module top(
                 end
             end
         endcase
+
+        if (memory_address[31:2] == ADDRESS_LED[31:2]) begin
+            led_on <= memory_write_value[0];
+        end
     end
 
     always @(posedge clk48) begin

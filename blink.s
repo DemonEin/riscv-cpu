@@ -1,13 +1,15 @@
 .global on
 on:
     li t0, 1
-    sw t0, 0(x0)
+    li t1, (1 << 31) | (4 * 4)
+    sw t0, 0(t1)
     ret
 
 .global off
 off:
     li t0, 0
-    sw t0, 0(x0)
+    li t1, (1 << 31) | (4 * 4)
+    sw t0, 0(t1)
     ret
 
 .global wait
