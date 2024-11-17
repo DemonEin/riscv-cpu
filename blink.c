@@ -1,13 +1,12 @@
-void wait();
-void on();
-void off();
+#include "lib/cpulib.h"
 
-int _start() {
-    
+void wait();
+
+int main() {
     while (1) {
-        on();
+        led_on();
         wait();
-        off();
+        led_off();
         wait();
     }
 

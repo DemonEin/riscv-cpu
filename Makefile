@@ -5,14 +5,15 @@ gcc_binary_prefix = ~/riscv-gcc/bin/riscv32-elf-
 needed_verilog_files = top.v core.v comparator.v alu.v registers.v csr.v
 
 VERILATOR_OPTIONS := +1364-2005ext+v -Wwarn-BLKSEQ
+GCC_OPTIONS := -march=rv32i_zicsr -mabi=ilp32
 
 .NOTINTERMEDIATE:
 
 %/verilator/Vtb_top: tb_top.v %/memory.hex %/entry.txt $(needed_verilog_files)
 	verilator $(VERILATOR_OPTIONS) +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) +define+MEMORY_FILE=\"$*/memory.hex\" --binary -j 0 tb_top.v $(needed_verilog_files) -Mdir $(@D)
 
-%/a.out: $(program_files) linker-script | %
-	$(gcc_binary_prefix)gcc -march=rv32i_zicsr -mabi=ilp32 -T linker-script -nostdlib -o $@ $(program_files)
+%/a.out: $(program_files) target/lib/cpulib.o linker-script | %
+	$(gcc_binary_prefix)gcc $(GCC_OPTIONS) -T linker-script -nostdlib -o $@ $(program_files) target/lib/cpulib.o
 
 %/memory.bin %/entry.txt &: %/a.out
 	cargo run --manifest-path loader/Cargo.toml -- \
@@ -21,7 +22,13 @@ VERILATOR_OPTIONS := +1364-2005ext+v -Wwarn-BLKSEQ
 %.hex: %.bin
 	hexdump -v -e '/4 "%x "' $< > $@
 
+lib/cpulib.o: lib/cpulib.h lib/cpulib.c lib/cpulib.s
+	$(gcc_binary_prefix)gcc $(GCC_OPTIONS) -r lib/cpulib.c lib/cpulib.s -o $@
+
 $(target_directory):
+	mkdir -p $@
+
+target/lib:
 	mkdir -p $@
 
 %/cpu.json: $(needed_verilog_files) %/memory.hex %/entry.txt
