@@ -2,7 +2,7 @@
 #include "stdbool.h"
 
 volatile u64* timer_cmp = (u64*) 0x80000000 + 8;
-volatile bool* led = (bool*) 0x80000000;
+volatile bool* led = (bool*) 0x80000000 + 4 * 4;
 
 void set_timer(u64 time) {
     *timer_cmp = *timer_cmp + time;
