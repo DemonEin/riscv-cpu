@@ -6,6 +6,10 @@ _start:
     csrrs zero, mtvec, t0
     j main
 
+.weak on_trap
+on_trap:
+    mret
+
 .global sleep_for_clock_cycles
 wait:
     li t0, 12000000
