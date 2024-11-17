@@ -80,13 +80,13 @@ module top(
         pending_read_shift <= memory_address[1:0];
 
         if (block_ram_write_sections[0]) begin
-            memory[memory_address][7:0] <= memory_write_value[7:0];
+            memory[memory_address[13:2]][7:0] <= memory_write_value[7:0];
         end
         if (block_ram_write_sections[1]) begin
-            memory[memory_address][15:8] <= memory_write_value[15:8];
+            memory[memory_address[13:2]][15:8] <= memory_write_value[15:8];
         end
         if (block_ram_write_sections[2]) begin
-            memory[memory_address][31:16] <= memory_write_value[31:16];
+            memory[memory_address[13:2]][31:16] <= memory_write_value[31:16];
         end
 
         case (memory_address[31:2])
