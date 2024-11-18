@@ -111,6 +111,13 @@ _start:
     li t0, 0xFFFFFFFF
     csrrc zero, mie, t0
 
+    li sp, 0x69
+    li t0, 289
+    sw t0, 0(sp)
+    li t1, 0
+    lw t1, 0(sp)
+    bne t0, t1, fail
+
 unimp_test:
     unimp
 
