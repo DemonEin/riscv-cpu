@@ -7,8 +7,8 @@ bad_instruction:
 .4byte 0xFFFFFFFF
 
 .align 4
-.global _start
-_start:
+.global main
+main:
     lb x1, string + 2
     li x2, 'l'
     bne x1, x2, fail
