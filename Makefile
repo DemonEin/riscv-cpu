@@ -22,7 +22,7 @@ GCC_OPTIONS := -march=rv32i_zicsr -mabi=ilp32
 %.hex: %.bin
 	hexdump -v -e '/4 "%x "' $< > $@
 
-lib/cpulib.o: lib/cpulib.h lib/cpulib.c lib/cpulib.s
+target/lib/cpulib.o: lib/cpulib.h lib/cpulib.c lib/cpulib.s | target/lib
 	$(gcc_binary_prefix)gcc $(GCC_OPTIONS) -r lib/cpulib.c lib/cpulib.s -o $@
 
 $(target_directory):
