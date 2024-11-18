@@ -59,6 +59,10 @@ sim: $(target_directory)/verilator/Vtb_top
 test:
 	make sim target_directory=target/test program_files=test.s
 
+.PHONY: blinksim
+blinksim:
+	make sim target_directory=target/blink program_files="blink.s blink.c"
+
 .PHONY: blinkinstall
 blinkinstall:
 	make install target_directory=target/blink program_files="blink.s blink.c"
@@ -76,5 +80,9 @@ readelf: target/test/a.out
 	readelf -a $<
 
 .PHONY: disassemble
-disassemble: target/test/a.out
+disassemble: target/blink/a.out
+	$(gcc_binary_prefix)objdump -d $<
+
+.PHONY: testdisassemble
+testdisassemble: target/test/a.out
 	$(gcc_binary_prefix)objdump -d $<
