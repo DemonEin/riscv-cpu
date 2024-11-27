@@ -86,3 +86,19 @@ disassemble: target/blink/a.out
 .PHONY: testdisassemble
 testdisassemble: target/test/a.out
 	$(gcc_binary_prefix)objdump -d $<
+
+.PHONY: usb
+usb: usb/usb.dfu
+	dfu-util --alt 0 -D $<
+
+.PHONY: usbtest
+usbtest: usb/verilator/Vtb_usb
+	$<
+
+usb/usb.json: usb.v
+	verilator +1364-2005ext+v --lint-only $^ && \
+	yosys -p "read_verilog $^; synth_ecp5 -json $@"
+
+usb/verilator/Vtb_usb: tb_usb.v usb.v
+	@# TODO consider using -Wall
+	verilator +1364-2005ext+v --binary -j 0 $^ -Mdir $(@D)
