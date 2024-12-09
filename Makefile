@@ -92,7 +92,7 @@ usbtest: target/usb/verilator/Vtb_usb target/usb/usbdata
 	$<
 
 target/usb/verilator/Vtb_usb: tb_usb.v usb.v
-	verilator +1364-2005ext+v --binary -j 0 $^ -Mdir $(@D)
+	verilator +1364-2005ext+v +define+simulation --binary -j 0 $^ -Mdir $(@D)
 
 target/usb:
 	mkdir -p $@
