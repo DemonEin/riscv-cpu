@@ -2,7 +2,7 @@ localparam FULL_SPEED_PERIOD = 83.3333333ns; // the period of usb full-speed tra
 localparam SYNC_PATTERN = 8'b01010100;
 
 module tb_usb();
-    wire data_wire, data_n_wire, usb_pullup, packet_ready;
+    wire data_wire, data_n_wire, usb_pullup;
 
     reg data, data_n;
     assign data_wire = data;
@@ -13,7 +13,8 @@ module tb_usb();
 
     reg clock48;
 
-    usb usb(clock48, data_wire, data_n_wire, usb_pullup, packet_ready);
+    wire r, g, b;
+    top top(clock48, data_wire, data_n_wire, usb_pullup, r, g, b);
 
     initial begin
         $readmemb("/dev/stdin", data_list);
@@ -47,13 +48,10 @@ module tb_usb();
         end
 
         #10ms
-        
-        $stop; // only hit if packet_ready isn't set which it should be
-    end
 
-    always @(posedge packet_ready) begin
-        $display("bits: %b", usb.packet_buffer[0][3:0]);
-        $finish;
+        $display(top.usb_packet_buffer[0][0]);
+        
+        $stop;
     end
 
     always #10.4166667ns begin // half of the 48mhz period

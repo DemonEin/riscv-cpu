@@ -91,8 +91,8 @@ testdisassemble: target/test/a.out
 usbtest: target/usb/verilator/Vtb_usb target/usb/usbdata
 	$< < target/usb/usbdata
 
-target/usb/verilator/Vtb_usb: tb_usb.v usb.v
-	verilator +1364-2005ext+v +define+simulation --binary -j 0 $^ -Mdir $(@D)
+target/usb/verilator/Vtb_usb: tb_usb.v usb.v top.v
+	verilator +1364-2005ext+v +define+simulation +define+INITIAL_PROGRAM_COUNTER=0 +define+MEMORY_FILE=\"/dev/null\" --binary -j 0 $^ -Mdir $(@D)
 
 target/usb:
 	mkdir -p $@
