@@ -16,7 +16,7 @@ module tb_usb();
     usb usb(clock48, data_wire, data_n_wire, usb_pullup, packet_ready);
 
     initial begin
-        $readmemb("usbdata", data_list);
+        $readmemb("/dev/stdin", data_list);
 
         // reset
         $display("sending reset signal");
