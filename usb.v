@@ -21,7 +21,6 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready);
     output reg packet_ready = 0;
     reg next_packet_ready;
 
-    reg [31:0] packet_buffer[1024/4];
     reg [$clog2(32) - 1:0] bits_to_read, next_bits_to_read;
     reg [$clog2(1024/4) - 1:0] buffer_write_index = 0, next_buffer_write_index;
 
@@ -135,7 +134,7 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready);
         previous_read_bits <= next_previous_read_bits;
 
         if (write_to_packet_buffer) begin
-            packet_buffer[buffer_write_index] <= read_bits;
+            top.usb_packet_buffer[buffer_write_index] <= read_bits;
         end
     end
 

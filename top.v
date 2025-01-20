@@ -5,10 +5,16 @@ localparam ADDRESS_MTIMEH = ADDRESS_MTIME + 4;
 localparam ADDRESS_MTIMECMP = ADDRESS_MTIMEH + 4;
 localparam ADDRESS_MTIMECMPH = ADDRESS_MTIMECMP + 4;
 localparam ADDRESS_LED = ADDRESS_MTIMECMPH + 4;
+localparam ADDRESS_USB_PACKET_BUFFER = 31'hc0000000;
+
+localparam USB_PACKET_BUFFER_SIZE = 1024; // in bytes
 
 module top(
     input clk48,
+    inout usb_d_p,
+    inout usb_d_n,
 
+    output usb_pullup,
     output rgb_led0_r,
     output rgb_led0_g,
     output rgb_led0_b
@@ -30,16 +36,30 @@ module top(
     (* ram_style = "block" *)
     reg [31:0] memory[MEMORY_SIZE - 1:0];
 
+    reg [31:0] usb_packet_buffer[USB_PACKET_BUFFER_SIZE / 4];
+
     reg led_on = 0;
 
+    // needed because of parsing errors that happen only in yosys when I do
+    // either of these inline
+    wire [31:0] usb_address_base = (memory_address - ADDRESS_USB_PACKET_BUFFER);
+    wire [7:0] usb_address = usb_address_base[9:2];
+
+    wire usb_packet_ready;
+    wire addressing_usb_packet_buffer = memory_address >= ADDRESS_USB_PACKET_BUFFER && memory_address < (ADDRESS_USB_PACKET_BUFFER + USB_PACKET_BUFFER_SIZE);
+
     core core(clk24, next_program_counter, program_memory_value, memory_address, unshifted_memory_write_value, memory_write_sections, memory_read_value);
+    usb usb(clk48, usb_d_p, usb_d_n, usb_pullup, usb_packet_ready);
 
     initial $readmemh(`MEMORY_FILE, memory);
 
     assign block_ram_write_sections = memory_address[31:2] == ADDRESS_MTIME[31:2]
         || memory_address[31:2] == ADDRESS_MTIMEH[31:2]
         || memory_address[31:2] == ADDRESS_MTIMECMP[31:2] 
-        || memory_address[31:2] == ADDRESS_MTIMECMPH[31:2] ? 0 : memory_write_sections;
+        || memory_address[31:2] == ADDRESS_MTIMECMPH[31:2] 
+        || addressing_usb_packet_buffer ? 0 : memory_write_sections;
+
+    wire [2:0] usb_packet_buffer_write_sections = addressing_usb_packet_buffer ? memory_write_sections : 0;
 
     assign rgb_led0_r = ~led_on;
     assign rgb_led0_g = ~led_on;
@@ -73,8 +93,14 @@ module top(
                 read_memory_mapped_register <= 1;
             end
             default: begin
-                memory_mapped_register_read_value <= 32'bx;
-                read_memory_mapped_register <= 0;
+                if (addressing_usb_packet_buffer) begin
+                    // the usb packet buffer isn't a register but whatever
+                    memory_mapped_register_read_value <= usb_packet_buffer[memory_address[9:2]];
+                    read_memory_mapped_register <= 1;
+                end else begin
+                    memory_mapped_register_read_value <= 32'bx;
+                    read_memory_mapped_register <= 0;
+                end
             end
         endcase
         pending_read_shift <= memory_address[1:0];
@@ -142,6 +168,18 @@ module top(
 
         if (memory_address[31:2] == ADDRESS_LED[31:2]) begin
             led_on <= memory_write_value[0];
+        end
+    end
+
+    always @(posedge clk48) begin
+        if (usb_packet_buffer_write_sections[0]) begin
+            usb_packet_buffer[usb_address][7:0] <= memory_write_value[7:0];
+        end
+        if (usb_packet_buffer_write_sections[1]) begin
+            usb_packet_buffer[usb_address][15:8] <= memory_write_value[15:8];
+        end
+        if (usb_packet_buffer_write_sections[2]) begin
+            usb_packet_buffer[usb_address][31:16] <= memory_write_value[31:16];
         end
     end
 
