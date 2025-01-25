@@ -56,6 +56,8 @@ localparam FUNC12_EBREAK = 12'b1;
 localparam FUNC12_MRET = 12'b001100000010;
 localparam FUNC12_WFI = 12'b000100000101;
 
+// custom instructions
+localparam FUNC12_CLEAR_USB_INTERRUPT = 12'b111011000000;
 `ifdef simulation
 localparam FUNC12_TEST_PASS = 12'b100011000000;
 localparam FUNC12_TEST_FAIL = 12'b110011000000;
@@ -76,6 +78,7 @@ localparam MCAUSE_ILLEGAL_INSTRUCTION = 2;
 localparam MCAUSE_BREAKPOINT = 3;
 localparam MCAUSE_ENVIRONMENT_CALL_FROM_M_MODE = 11;
 localparam MCAUSE_MACHINE_TIMER_INTERRUPT = (1 << 31) | 7;
+localparam MCAUSE_MACHINE_EXTERNAL_INTERRUPT = (1 << 31) | 11;
 
 module core(clock, next_program_counter, program_memory_value, memory_address, memory_write_value, memory_write_sections, memory_read_value);
 
@@ -109,6 +112,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     reg [31:0] mcause;
     reg return_from_trap;
     reg stall = 1;
+    reg clear_mip_meip;
 
     `ifdef simulation
         reg finish;
@@ -170,6 +174,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         trap = 1'b0;
         mcause = 32'bx;
         return_from_trap = 1'b0;
+        clear_mip_meip = 0;
 
         next_program_counter = program_counter;
 
@@ -201,6 +206,8 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
 
         if (control_status_registers.mstatus_mie && control_status_registers.mie_mtie && control_status_registers.mip_mtip) begin
             raise(MCAUSE_MACHINE_TIMER_INTERRUPT);
+        end else if (control_status_registers.mstatus_mie && control_status_registers.mie_meie && control_status_registers.mip_meip) begin
+            raise(MCAUSE_MACHINE_EXTERNAL_INTERRUPT);
         end else if (!stall) begin
             next_program_counter = next_instruction_address;
 
@@ -345,6 +352,11 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                     FUNC12_WFI: begin
                                         // nop
                                     end
+                                    // custom instruction for telling the usb
+                                    // hardware the packet has been handled
+                                    FUNC12_CLEAR_USB_INTERRUPT: begin
+                                        clear_mip_meip = 1;
+                                    end
                                     `ifdef simulation 
                                         // custom instructions for running tests
                                         FUNC12_TEST_PASS: begin
@@ -453,6 +465,9 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         stall <= 0;
         load_register <= pending_load_register;
         load_funct3 <= pending_load_funct3;
+        if (clear_mip_meip) begin
+            control_status_registers.mip_meip <= 0;
+        end
     end
 
     task raise(input [31:0] _mcause);

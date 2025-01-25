@@ -55,6 +55,10 @@ install: $(target_directory)/cpu.dfu
 sim: $(target_directory)/verilator/Vtb_top
 	$<
 
+.PHONY: usbsim
+usbsim: $(target_directory)/verilator/Vtb_usb $(target_directory)/usbdata
+	$< < $(target_directory)/usbdata
+
 .PHONY: test
 test:
 	make sim target_directory=target/test program_files=test.s
@@ -87,15 +91,20 @@ disassemble: target/blink/a.out
 testdisassemble: target/test/a.out
 	$(gcc_binary_prefix)objdump -d $<
 
-.PHONY: usbtest
-usbtest: target/usb/verilator/Vtb_usb target/usb/usbdata
-	$< < target/usb/usbdata
+.PHONY: usbtestdisassemble
+usbtestdisassemble: target/usbtest/a.out
+	$(gcc_binary_prefix)objdump -d $<
 
-target/usb/verilator/Vtb_usb: tb_usb.v usb.v top.v
-	verilator +1364-2005ext+v +define+simulation +define+INITIAL_PROGRAM_COUNTER=0 +define+MEMORY_FILE=\"/dev/null\" --binary -j 0 $^ -Mdir $(@D)
+.PHONY: usbtest
+usbtest:
+	make usbsim target_directory=target/usbtest program_files="usbtest.c"
+
+%/verilator/Vtb_usb: tb_usb.v usb.v $(needed_verilog_files) %/memory.hex %/entry.txt
+	# TODO deduplicate with Vtb_top recipe
+	verilator $(VERILATOR_OPTIONS) +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) +define+MEMORY_FILE=\"$*/memory.hex\" --binary -j 0 tb_usb.v usb.v $(needed_verilog_files) -Mdir $(@D)
 
 target/usb:
 	mkdir -p $@
 
-target/usb/usbdata: usbtestdata | target/usb
+%/usbdata: usbtestdata | target/usb
 	 cargo run --manifest-path usb-encode/Cargo.toml < $^ > $@

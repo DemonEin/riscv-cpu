@@ -82,6 +82,8 @@ module csr(clock, address, read_value, write_value, write_enable);
 
     reg [31:0] mcause = 0;
 
+    reg previous_usb_packet_ready = 0;
+
     wire [63:0] next_mcycle;
     assign next_mcycle = mcycle + 1;
 
@@ -305,6 +307,11 @@ module csr(clock, address, read_value, write_value, write_enable);
         end else begin
             mcycle <= next_mcycle;
             minstret <= next_minstret;
+        end
+
+        previous_usb_packet_ready <= usb.packet_ready;
+        if (usb.packet_ready && (!previous_usb_packet_ready)) begin
+            mip_meip <= 1;
         end
     end
 

@@ -83,9 +83,13 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready);
                 if (data_ready) begin
                     if (bits_to_read == 0) begin
                         if (read_bits[31:24] == 8'b10000000) begin
-                            next_state = STATE_READING;
-                            next_bits_to_read = 31;
-                            next_buffer_write_index = 0;
+                            if (!top.core.control_status_registers.mip_meip) begin
+                                next_state = STATE_READING;
+                                next_bits_to_read = 31;
+                                next_buffer_write_index = 0;
+                            end else begin
+                                next_state = STATE_IGNORE_PACKET;
+                            end
                         end else begin
                             `ifdef simulation
                                 $stop;
