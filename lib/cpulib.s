@@ -21,6 +21,7 @@ wait_loop:
 .global clear_usb_interrupt
 clear_usb_interrupt:
     .insn 0xec000073 # custom instruction
+    ret
 
 .global pass
 pass:
