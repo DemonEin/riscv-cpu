@@ -37,7 +37,7 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready);
     wire data = data_j;
 
     reg [1:0] data_ready_counter = 0, next_data_ready_counter;
-    wire data_ready = data_ready_counter == 3 && !skip_bit;
+    wire data_ready = data_ready_counter == 3;
     reg previous_data, next_previous_data;
 
     wire read_complete = bits_to_read == 0;
@@ -59,13 +59,13 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready);
         next_buffer_write_index = 8'bx;
         next_packet_ready = packet_ready;
 
-        if (data_ready_counter == 3) begin
+        if (data_ready) begin
             next_previous_data = data;
         end else begin
             next_previous_data = previous_data;
         end
 
-        if (data_ready) begin
+        if (data_ready && !skip_bit) begin
             next_previous_data = data;
             next_bits_to_read = bits_to_read - 1;
         end else begin
@@ -132,7 +132,7 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready);
             reset_counter <= 0;
         end
 
-        if (data_ready_counter == 3) begin
+        if (data_ready) begin
             if (!skip_bit) begin
                 read_bits <= { decoded_data, read_bits[31: 1] };
             end
