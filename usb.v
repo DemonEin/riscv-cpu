@@ -47,6 +47,7 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready);
     wire decoded_data = nzri_decoded_data; // only defined when !skip_bit
     // bits are sent least-significant bit first
     reg [31:0] read_bits; // these are the last 32 decoded bits
+    reg [31:0] bits_to_write;
 
     reg write_to_packet_buffer;
 
@@ -58,6 +59,7 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready);
         write_to_packet_buffer = 0;
         next_buffer_write_index = 8'bx;
         next_packet_ready = packet_ready;
+        bits_to_write = read_bits;
 
         if (data_ready) begin
             next_previous_data = data;
@@ -107,10 +109,15 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready);
             end
             STATE_READING: begin
                 next_data_ready_counter = data_ready_counter + 1;
-                if (read_complete) begin
+                if (data_ready && se0) begin
+                    // end of packet
+                    next_state = STATE_READ_COMPLETE;
+                    write_to_packet_buffer = 1;
+                    bits_to_write = read_bits >> bits_to_read;
+                end else if (read_complete) begin
                     write_to_packet_buffer = 1;
 
-                    if (buffer_write_index == 8'h0) begin
+                    if (buffer_write_index == 8'hFF) begin
                         next_packet_ready = 1;
                         next_state = STATE_READ_COMPLETE;
                     end

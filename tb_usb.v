@@ -47,6 +47,12 @@ module tb_usb();
             #FULL_SPEED_PERIOD;
         end
 
+        // send end of packet
+        data = 0;
+        data_n = 0;
+        #FULL_SPEED_PERIOD
+        #FULL_SPEED_PERIOD
+
         #10ms
 
         $display(top.usb_packet_buffer[0][0]);
