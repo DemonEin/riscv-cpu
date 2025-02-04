@@ -8,40 +8,70 @@ fn main() {
     let mut stdout = std::io::stdout();
     stdin.read_to_string(&mut buffer).unwrap();
 
-    let mut output = String::new();
-    for bit in UsbEncoder::from(buffer.split_whitespace().map(|substring| match substring {
-        "0" => false,
-        "1" => true,
-        _ => panic!(),
-    })) {
-        if bit {
-            output.push_str("1 ");
-        } else {
-            output.push_str("0 ");
-        }
-    }
-
-    stdout.write(output.as_bytes()).unwrap();
+    stdout
+        .write(
+            &BitsToLittleEndianBytes::from(UsbEncoder::from(buffer.split_whitespace().map(
+                |substring| match substring {
+                    "0" => false,
+                    "1" => true,
+                    _ => panic!(),
+                },
+            )))
+            .collect::<Vec<u8>>(),
+        )
+        .unwrap();
 }
 
-struct UsbEncoder<I: Iterator<Item=bool>> {
+struct BitsToLittleEndianBytes<I> {
+    inner: I,
+}
+
+impl<I: Iterator<Item = bool>> From<I> for BitsToLittleEndianBytes<I> {
+    fn from(iterator: I) -> Self {
+        Self { inner: iterator }
+    }
+}
+
+impl<I: Iterator<Item = bool>> Iterator for BitsToLittleEndianBytes<I> {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<u8> {
+        let mut byte: u8 = 0;
+        let mut got_bit = false;
+        for bit_index in 0..8 {
+            if let Some(bit) = self.inner.next() {
+                byte |= if bit { 1 } else { 0 } << bit_index;
+                got_bit = true;
+            } else {
+                break;
+            }
+        }
+
+        if !got_bit {
+            None
+        } else {
+            Some(byte)
+        }
+    }
+}
+
+struct UsbEncoder<I: Iterator<Item = bool>> {
     inner: I,
     consecutive_input_ones: i32,
     previous_output: bool,
 }
 
-impl<I: Iterator<Item=bool>> From<I> for UsbEncoder<I> {
+impl<I: Iterator<Item = bool>> From<I> for UsbEncoder<I> {
     fn from(iterator: I) -> Self {
         UsbEncoder {
             inner: iterator,
             consecutive_input_ones: 1, // since the sync packet ends with an encoded one
-            previous_output: false, // since the sync packet ends at low level
+            previous_output: false,    // since the sync packet ends at low level
         }
     }
-
 }
 
-impl<I: Iterator<Item=bool>> Iterator for UsbEncoder<I> {
+impl<I: Iterator<Item = bool>> Iterator for UsbEncoder<I> {
     type Item = bool;
 
     fn next(&mut self) -> Option<bool> {
@@ -51,9 +81,10 @@ impl<I: Iterator<Item=bool>> Iterator for UsbEncoder<I> {
                 self.consecutive_input_ones = 0;
                 Some(!self.previous_output)
             }
-            _ => if let Some(inner_next) = self.inner.next() {
+            _ => {
+                if let Some(inner_next) = self.inner.next() {
                     self.consecutive_input_ones = if inner_next {
-                        self.consecutive_input_ones + 1 
+                        self.consecutive_input_ones + 1
                     } else {
                         0
                     };
@@ -61,6 +92,7 @@ impl<I: Iterator<Item=bool>> Iterator for UsbEncoder<I> {
                 } else {
                     None
                 }
+            }
         };
 
         if let Some(output) = output {
@@ -84,5 +116,7 @@ fn encode_str(s: &str) -> String {
         '0' => false,
         '1' => true,
         _ => panic!(),
-    })).map(|bit| if bit { '1' } else { '0' }).collect()
+    }))
+    .map(|bit| if bit { '1' } else { '0' })
+    .collect()
 }

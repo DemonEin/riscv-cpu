@@ -1,5 +1,6 @@
 localparam FULL_SPEED_PERIOD = 83.3333333ns; // the period of usb full-speed transimssion (12 mhz
 localparam SYNC_PATTERN = 8'b01010100;
+localparam STDIN = 32'h8000_0000;
 
 module tb_usb();
     wire data_wire, data_n_wire, usb_pullup;
@@ -8,7 +9,7 @@ module tb_usb();
     assign data_wire = data;
     assign data_n_wire = data_n;
 
-    reg data_list[1024 * 8];
+    reg [7:0] data_list[1024];
     reg [12:0] data_index = 0;
 
     reg clock48;
@@ -17,16 +18,14 @@ module tb_usb();
     top top(clock48, data_wire, data_n_wire, usb_pullup, r, g, b);
 
     initial begin
-        $readmemb("/dev/stdin", data_list);
+        reg [31:0] bytes_read = $fread(data_list, STDIN);
 
         // reset
-        $display("sending reset signal");
         data = 0;
         data_n = 0;
         #30ms
 
         // idle
-        $display("sending idle signal");
         data = 1;
         data_n = 0;
         #10ms
@@ -35,16 +34,16 @@ module tb_usb();
         for (reg [3:0] i = 0; i < 8; i = i + 1) begin
             data = SYNC_PATTERN[7 - i[2:0]];
             data_n = ~data;
-            $display("sending data: %b from index: %d", data, 7 - i[2:0]);
             #FULL_SPEED_PERIOD;
         end
 
         // send data
-        for (reg [31:0] i = 0; i < 1024 * 8; i = i + 1) begin
-            data = data_list[i];
-            data_n = ~data;
-            $display("sending real data %b", data);
-            #FULL_SPEED_PERIOD;
+        for (reg [31:0] i = 0; i < bytes_read; i = i + 1) begin
+            for (reg [7:0] j = 0; j < 8; j = j + 1) begin
+                data = data_list[i][j[2:0]];
+                data_n = ~data;
+                #FULL_SPEED_PERIOD;
+            end
         end
 
         // send end of packet
@@ -55,8 +54,12 @@ module tb_usb();
 
         #10ms
 
-        $display(top.usb_packet_buffer[0][0]);
-        
+        for (reg [31:0] i = 0; i < bytes_read; i = i + 1) begin
+            for (reg [7:0] j = 0; j < 8; j = j + 1) begin
+                $write("%b", top.usb_packet_buffer[i / 4][j[4:0] << (8 * (i % 4))]);
+            end
+        end
+
         $stop;
     end
 
