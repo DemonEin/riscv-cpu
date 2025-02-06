@@ -55,9 +55,7 @@ module tb_usb();
         #10ms
 
         for (reg [31:0] i = 0; i < bytes_read; i = i + 1) begin
-            for (reg [7:0] j = 0; j < 8; j = j + 1) begin
-                $write("%b", top.usb_packet_buffer[i / 4][j[4:0] << (8 * (i % 4))]);
-            end
+            $write("%u", (top.usb_packet_buffer[i / 4] >> ((i % 4) * 8)) & 0'hFF);
         end
 
         $stop;
