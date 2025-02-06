@@ -57,7 +57,7 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready);
     always @* begin
         next_state = state;
         write_to_packet_buffer = 0;
-        next_buffer_write_index = 8'bx;
+        next_buffer_write_index = buffer_write_index;
         next_packet_ready = packet_ready;
         bits_to_write = read_bits;
 
