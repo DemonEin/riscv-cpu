@@ -2,20 +2,12 @@ use std::io::Read;
 use std::io::Write;
 
 fn main() {
-    let mut stdin = std::io::stdin();
-    let mut buffer = String::new();
-
-    let mut stdout = std::io::stdout();
-    stdin.read_to_string(&mut buffer).unwrap();
-
-    stdout
+    std::io::stdout()
         .write(
-            &BitsToLittleEndianBytes::from(UsbEncoder::from(buffer.split_whitespace().map(
-                |substring| match substring {
-                    "0" => false,
-                    "1" => true,
-                    _ => panic!(),
-                },
+            &BitsToLittleEndianBytes::from(UsbEncoder::from(LittleEndianBytesToBits::from(
+                std::io::stdin()
+                    .bytes()
+                    .map(|byte_result| byte_result.unwrap()),
             )))
             .collect::<Vec<u8>>(),
         )
@@ -51,6 +43,43 @@ impl<I: Iterator<Item = bool>> Iterator for BitsToLittleEndianBytes<I> {
             None
         } else {
             Some(byte)
+        }
+    }
+}
+
+struct LittleEndianBytesToBits<I> {
+    inner: I,
+    current_index: u8,
+    current_byte: u8,
+}
+
+impl<I: Iterator<Item = u8>> Iterator for LittleEndianBytesToBits<I> {
+    type Item = bool;
+
+    fn next(&mut self) -> Option<bool> {
+        if self.current_index < 8 {
+            let result = Some(self.current_byte & (1 << self.current_index) > 0);
+            self.current_index += 1;
+            result
+        } else {
+            if let Some(next) = self.inner.next() {
+                self.current_byte = next;
+                let result = Some(self.current_byte & 1 > 0);
+                self.current_index = 1;
+                result
+            } else {
+                None
+            }
+        }
+    }
+}
+
+impl<I: Iterator<Item = u8>> From<I> for LittleEndianBytesToBits<I> {
+    fn from(iterator: I) -> Self {
+        Self {
+            inner: iterator,
+            current_index: 8,
+            current_byte: 0,
         }
     }
 }
@@ -119,4 +148,10 @@ fn encode_str(s: &str) -> String {
     }))
     .map(|bit| if bit { '1' } else { '0' })
     .collect()
+}
+
+#[test]
+fn iterate_bit_test() {
+    assert!(LittleEndianBytesToBits::from([0b011].into_iter())
+        .eq([true, true, false, false, false, false, false, false].into_iter()))
 }
