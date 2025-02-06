@@ -161,7 +161,7 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready);
         previous_data <= next_previous_data;
 
         if (write_to_packet_buffer) begin
-            top.usb_packet_buffer[buffer_write_index] <= read_bits;
+            top.usb_packet_buffer[buffer_write_index] <= bits_to_write;
         end
     end
 endmodule
