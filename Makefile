@@ -56,8 +56,8 @@ sim: $(target_directory)/verilator/Vtb_top
 	$<
 
 .PHONY: usbsim
-usbsim: $(target_directory)/verilator/Vtb_usb $(target_directory)/usbdata
-	diff <( $< < $(target_directory)/usbdata | head -c $$(wc -c < usbtestdata) ) usbtestdata
+usbsim: $(target_directory)/verilator/Vtb_usb usbtestdata
+	diff <( cargo run --manifest-path usb-encode/Cargo.toml < usbtestdata | $< | head -c $$(wc -c < usbtestdata) ) usbtestdata
 
 .PHONY: test
 test:
@@ -106,5 +106,3 @@ usbtest:
 target/usb:
 	mkdir -p $@
 
-%/usbdata: usbtestdata | target/usb
-	 cargo run --manifest-path usb-encode/Cargo.toml < $^ > $@
