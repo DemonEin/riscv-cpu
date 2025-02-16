@@ -57,7 +57,7 @@ sim: $(target_directory)/verilator/Vtb_top
 
 .PHONY: usbsim
 usbsim: $(target_directory)/verilator/Vtb_usb $(target_directory)/usbdata
-	$< < $(target_directory)/usbdata
+	diff <( $< < $(target_directory)/usbdata | head -c $$(wc -c < usbtestdata) ) usbtestdata
 
 .PHONY: test
 test:
