@@ -2,15 +2,17 @@
 # this is what I use
 gcc_binary_prefix = ~/riscv-gcc/bin/riscv32-elf-
 
-needed_verilog_files = top.v core.v comparator.v alu.v registers.v csr.v
+needed_verilog_files = top.v core.v comparator.v alu.v registers.v csr.v usb.v
 
 VERILATOR_OPTIONS := +1364-2005ext+v -Wwarn-BLKSEQ
 GCC_OPTIONS := -march=rv32i_zicsr -mabi=ilp32
 
+testbench ?= tb_top.v
+
 .NOTINTERMEDIATE:
 
-%/verilator/Vtb_top: tb_top.v %/memory.hex %/entry.txt $(needed_verilog_files)
-	verilator $(VERILATOR_OPTIONS) +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) +define+MEMORY_FILE=\"$*/memory.hex\" --binary -j 0 tb_top.v $(needed_verilog_files) -Mdir $(@D)
+%/verilator/sim: $(testbench) %/memory.hex %/entry.txt $(needed_verilog_files)
+	verilator $(VERILATOR_OPTIONS) +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) +define+MEMORY_FILE=\"$*/memory.hex\" --binary -j 0 $(testbench) $(needed_verilog_files) -Mdir $(@D) -o $(@F)
 
 %/a.out: $(program_files) target/lib/cpulib.o linker-script | %
 	$(gcc_binary_prefix)gcc $(GCC_OPTIONS) -T linker-script -nostdlib -o $@ $(program_files) target/lib/cpulib.o
@@ -52,11 +54,11 @@ install: $(target_directory)/cpu.dfu
 	dfu-util --alt 0 -D $<
 
 .PHONY: sim
-sim: $(target_directory)/verilator/Vtb_top
+sim: $(target_directory)/verilator/sim
 	$<
 
 .PHONY: usbsim
-usbsim: $(target_directory)/verilator/Vtb_usb usbtestdata
+usbsim: $(target_directory)/verilator/sim usbtestdata
 	diff <( cargo run --manifest-path usb-encode/Cargo.toml < usbtestdata | $< | head -c $$(wc -c < usbtestdata) ) usbtestdata
 
 .PHONY: test
@@ -97,11 +99,7 @@ usbtestdisassemble: target/usbtest/a.out
 
 .PHONY: usbtest
 usbtest:
-	make usbsim target_directory=target/usbtest program_files="usbtest.c"
-
-%/verilator/Vtb_usb: tb_usb.v usb.v $(needed_verilog_files) %/memory.hex %/entry.txt
-	# TODO deduplicate with Vtb_top recipe
-	verilator $(VERILATOR_OPTIONS) +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) +define+MEMORY_FILE=\"$*/memory.hex\" --binary -j 0 tb_usb.v usb.v $(needed_verilog_files) -Mdir $(@D)
+	make usbsim target_directory=target/usbtest program_files="usbtest.c" testbench=tb_usb.v
 
 target/usb:
 	mkdir -p $@
