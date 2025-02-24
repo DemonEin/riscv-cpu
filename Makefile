@@ -15,7 +15,7 @@ testbench ?= tb_top.v
 	verilator $(VERILATOR_OPTIONS) +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) +define+MEMORY_FILE=\"$*/memory.hex\" --binary -j 0 $(testbench) $(needed_verilog_files) -Mdir $(@D) -o $(@F)
 
 %/a.out: $(program_files) target/lib/cpulib.o linker-script | %
-	$(gcc_binary_prefix)gcc $(GCC_OPTIONS) -T linker-script -nostdlib -o $@ $(program_files) target/lib/cpulib.o
+	$(gcc_binary_prefix)gcc $(GCC_OPTIONS) -I . -T linker-script -nostdlib -o $@ $(program_files) target/lib/cpulib.o
 
 %/memory.bin %/entry.txt &: %/a.out
 	cargo run --manifest-path loader/Cargo.toml -- \
@@ -64,14 +64,6 @@ usbsim: $(target_directory)/verilator/sim usbtestdata
 .PHONY: test
 test:
 	make sim target_directory=target/test program_files=test.s
-
-.PHONY: blinksim
-blinksim:
-	make sim target_directory=target/blink program_files="blink.s blink.c"
-
-.PHONY: blinkinstall
-blinkinstall:
-	make install target_directory=target/blink program_files="blink.s blink.c"
 
 .PHONY: testsynth
 testsynth: 
