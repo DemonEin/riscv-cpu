@@ -1,9 +1,3 @@
-export program_files = blink/blink.s blink/blink.c
+program_files = blink.s blink.c
 
-.PHONY: sim
-sim:
-	make -C ../ sim target_directory=target/blink
-
-.PHONY: install
-install:
-	make -C ../ install target_directory=target/blink
+include ../Makefile
