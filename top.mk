@@ -87,19 +87,11 @@ clean:
 	rm -rf $(current_directory)target
 
 .PHONY: readelf
-readelf: target/test/a.out
+readelf: $(target_directory)/a.out
 	readelf -a $<
 
 .PHONY: disassemble
-disassemble: target/blink/a.out
-	$(gcc_binary_prefix)objdump -d $<
-
-.PHONY: testdisassemble
-testdisassemble: target/test/a.out
-	$(gcc_binary_prefix)objdump -d $<
-
-.PHONY: usbtestdisassemble
-usbtestdisassemble: target/usbtest/a.out
+disassemble: $(target_directory)/a.out
 	$(gcc_binary_prefix)objdump -d $<
 
 .PHONY: usbtest
