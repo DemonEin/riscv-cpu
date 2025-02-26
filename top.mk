@@ -74,13 +74,8 @@ usbsim: $(target_directory)/verilator/sim $(current_directory)usbtestdata
 		| head -c $$(wc -c < $(current_directory)usbtestdata) ) \
 	($(current_directory)usbtestdata
 
-.PHONY: test
-test:
-	make sim target_directory=target/test program_files=test.s
-
-.PHONY: testsynth
-testsynth: 
-	make target/test/cpu.json target_directory=target/test program_files=test.s
+.PHONY: synth
+synth: $(target_directory)/cpu.json
 
 .PHONY: clean
 clean:
