@@ -67,13 +67,6 @@ install: $(target_directory)/cpu.dfu
 sim: $(target_directory)/verilator/sim
 	$<
 
-.PHONY: usbsim
-usbsim: $(target_directory)/verilator/sim $(current_directory)usbtestdata
-	diff <( cargo run --manifest-path $(current_directory)usb-encode/Cargo.toml < $(current_directory)usbtestdata \
-		| $< \
-		| head -c $$(wc -c < $(current_directory)usbtestdata) ) \
-	($(current_directory)usbtestdata
-
 .PHONY: synth
 synth: $(target_directory)/cpu.json
 
@@ -88,11 +81,4 @@ readelf: $(target_directory)/a.out
 .PHONY: disassemble
 disassemble: $(target_directory)/a.out
 	$(gcc_binary_prefix)objdump -d $<
-
-.PHONY: usbtest
-usbtest:
-	make usbsim target_directory=target/usbtest program_files="usbtest.c" testbench=tb_usb.v
-
-target/usb:
-	mkdir -p $@
 
