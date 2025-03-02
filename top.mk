@@ -7,7 +7,8 @@ gcc_binary_prefix = ~/riscv-gcc/bin/riscv32-elf-
 # includes trailing slash
 current_directory := $(dir $(lastword $(MAKEFILE_LIST)))
 
-needed_verilog_files := $(foreach file, top.v core.v comparator.v alu.v registers.v csr.v usb.v, $(current_directory)$(file))
+# the top files must be included before their dependencies for yosys
+needed_verilog_files := $(foreach file, top.v core.v comparator.v alu.v registers.v csr.v usb.v, $(current_directory)cpu/$(file))
 
 VERILATOR_OPTIONS := +1364-2005ext+v -Wwarn-BLKSEQ
 GCC_OPTIONS := -march=rv32i_zicsr -mabi=ilp32
@@ -49,8 +50,8 @@ $(current_directory)target/lib:
 	verilator  --lint-only $(VERILATOR_OPTIONS) +define+INITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER +define+MEMORY_FILE='"$*/memory.hex"' $(needed_verilog_files) && \
 	yosys -p "read_verilog -DINITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER -DMEMORY_FILE=\"$*/memory.hex\" $(needed_verilog_files); synth_ecp5 -json $@"
 
-%.config: %.json $(current_directory)orangecrab.lpf
-	nextpnr-ecp5 --85k --package CSFBGA285 --lpf $(current_directory)orangecrab.lpf --json $< --textcfg $@
+%.config: %.json $(current_directory)cpu/orangecrab.lpf
+	nextpnr-ecp5 --85k --package CSFBGA285 --lpf $(current_directory)cpu/orangecrab.lpf --json $< --textcfg $@
 
 %.bit: %.config
 	ecppack --compress --freq 38.8 --input $< --bit $@
