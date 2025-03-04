@@ -38,7 +38,11 @@ module top(
 
     reg [31:0] usb_packet_buffer[USB_PACKET_BUFFER_SIZE / 4];
 
-    reg led_on = 0;
+    // setting this to 1 keeps it on
+    // reg led_on = 0;
+    reg red = 0;
+    reg green = 0;
+    reg blue = 0;
 
     // needed because of parsing errors that happen only in yosys when I do
     // either of these inline
@@ -61,9 +65,9 @@ module top(
 
     wire [2:0] usb_packet_buffer_write_sections = addressing_usb_packet_buffer ? memory_write_sections : 0;
 
-    assign rgb_led0_r = ~led_on;
-    assign rgb_led0_g = ~led_on;
-    assign rgb_led0_b = ~led_on;
+    assign rgb_led0_r = ~red;
+    assign rgb_led0_g = ~green;
+    assign rgb_led0_b = ~blue;
 
     assign unshifted_memory_read_value = read_memory_mapped_register ? memory_mapped_register_read_value : block_ram_read_value;
     // these shifts work due to requiring natural alignment of memory accesses
@@ -71,6 +75,7 @@ module top(
     assign memory_write_value = unshifted_memory_write_value << (memory_address[1:0] * 8);
 
     always @(posedge clk24) begin
+        // $display("next_program_counter: %h", next_program_counter);
         program_memory_value <= memory[next_program_counter[13:2]];
         // needs to be shifted for non-32 bit aligned reads, but that can't be
         // done in this block because the synthesizer has trouble with it
@@ -115,6 +120,7 @@ module top(
             memory[memory_address[13:2]][31:16] <= memory_write_value[31:16];
         end
 
+        // TODO bug when addressing inner byte?
         case (memory_address[31:2])
             ADDRESS_MTIME[31:2]: begin
                 if (memory_write_sections[0]) begin
@@ -166,9 +172,37 @@ module top(
             end
         endcase
 
-        if (memory_address[31:2] == ADDRESS_LED[31:2]) begin
-            led_on <= memory_write_value[0];
+        if (next_program_counter < `INITIAL_PROGRAM_COUNTER || next_program_counter > `INITIAL_PROGRAM_COUNTER + 40) begin
+            red <= 1;
         end
+        
+        // if (memory_address[31] == 1) begin
+        // if (memory_address[31:2] == ADDRESS_LED[31:2]) begin
+          // if (memory_write_sections != 0 && memory_write_value == 0) begin
+            // led_on <= memory_write_value[0];
+            // led_on <= !memory_write_value[0];
+                // led_on <= !led_on;
+                // led_on <= !led_on;
+            // end
+        // end
+        //
+        // this works
+        // if (block_ram_read_value == 32'h80000010) begin
+          //   led_on <= 1;
+        // end
+        if (memory_read_value == 32'h80000010) begin
+            green <= 1;
+        end
+        if (unshifted_memory_write_value == 32'h80000010) begin
+            blue <= 1;
+        end
+        // this works
+        //if (memory_address == 32'h80000010) begin
+            //led_on <= 1;
+        //end
+        // if (memory_write_value) begin
+            // led_on <= 1;
+        // end
     end
 
     always @(posedge clk48) begin

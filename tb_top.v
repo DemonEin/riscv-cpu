@@ -5,5 +5,5 @@ module tb_top;
     wire usb_d_p, usb_d_n, usb_pullup, r, g, b;
     top top(clock, usb_d_p, usb_d_n, usb_pullup, r, g, b);
 
-    initial $monitor(r);
+    initial $monitor(b);
 endmodule

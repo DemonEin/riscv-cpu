@@ -156,8 +156,10 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
 
         register_write_address_1 = 5'b0;
         register_write_value_1 = 32'bx;
-        memory_address = 32'bx;
-        memory_write_value = 32'bx;
+        // memory_address = 32'bx;
+        memory_address = 0;
+        // memory_write_value = 32'bx;
+        memory_write_value = 0;
         memory_write_sections = 0;
 
         csr_write_enable = 0;

@@ -66,11 +66,12 @@ install: $(target_directory)/cpu.dfu
 
 .PHONY: sim
 sim: $(target_directory)/verilator/sim
-	$<
+	$< +verilator+seed+5
 
 .PHONY: synth
 synth: $(target_directory)/cpu.json
 
+# TODO include rust builds results
 .PHONY: clean
 clean:
 	rm -rf $(current_directory)target
@@ -82,4 +83,8 @@ readelf: $(target_directory)/a.out
 .PHONY: disassemble
 disassemble: $(target_directory)/a.out
 	$(gcc_binary_prefix)objdump -d $<
+
+.PHONY: objdump
+objdump: $(target_directory)/a.out
+	$(gcc_binary_prefix)objdump -D $<
 
