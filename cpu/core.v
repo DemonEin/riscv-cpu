@@ -124,6 +124,31 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     comparator comparator(comparator_opcode, comparator_operand_1, comparator_operand_2, comparator_result);
     csr control_status_registers(clock, csr_address, csr_read_value, csr_write_value, csr_write_enable);
 
+    `ifdef YOSYS
+        // for these to be connected to the wire/reg in the csr module in yosys, they
+        // mut be redeclared with the hierconn attribute
+        // NOT NOT FORGET TO INCLUDE WIRES HERE; if not included the wire will
+        // have the value x which is extremely difficult to debug as it causes
+        // UB only in synthesis and not in simulation
+        // this can only be done in yosys because in verilator these wires are
+        // connected anyway and declaring them like this causes a compilation
+        // error
+        (* hierconn *)
+        wire control_status_registers.mstatus_mie;
+        (* hierconn *)
+        wire control_status_registers.mie_mtie;
+        (* hierconn *)
+        wire control_status_registers.mie_meie;
+        (* hierconn *)
+        wire control_status_registers.mip_mtip;
+        (* hierconn *)
+        wire control_status_registers.mip_meip;
+        (* hierconn *)
+        wire control_status_registers.mepc;
+        (* hierconn *)
+        wire control_status_registers.base;
+    `endif
+
     assign instruction = program_memory_value;
     assign opcode = instruction[6:0];
 
@@ -161,6 +186,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         memory_write_sections = 0;
 
         csr_write_enable = 0;
+        csr_write_value = 32'bx;
         csr_address = 12'bx;
 
         // load operations take 2 cycles to complete because the memory is

@@ -48,7 +48,7 @@ $(current_directory)target/lib:
 	@# run verilator --lint-only before building because yosys does not report many simple errors
 	INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) && \
 	verilator  --lint-only $(VERILATOR_OPTIONS) +define+INITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER +define+MEMORY_FILE='"$*/memory.hex"' $(needed_verilog_files) && \
-	yosys -p "read_verilog -DINITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER -DMEMORY_FILE=\"$*/memory.hex\" $(needed_verilog_files); synth_ecp5 -json $@"
+	yosys -p "read_verilog -DYOSYS -DINITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER -DMEMORY_FILE=\"$*/memory.hex\" $(needed_verilog_files); synth_ecp5 -json $@"
 
 %.config: %.json $(current_directory)cpu/orangecrab.lpf
 	nextpnr-ecp5 --85k --package CSFBGA285 --lpf $(current_directory)cpu/orangecrab.lpf --json $< --textcfg $@
