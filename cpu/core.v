@@ -91,7 +91,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     // half-word high byte, LSB means write low byte
     output reg [2:0] memory_write_sections;
 
-    wire [31:0] instruction, alu_result, memory_read_value, next_instruction_address, base_register_read_value_1, base_register_read_value_2, csr_read_value;
+    wire [31:0] instruction, alu_result, next_instruction_address, base_register_read_value_1, base_register_read_value_2, csr_read_value;
     wire [31:0] i_immediate, s_immediate, b_immediate, u_immediate, j_immediate, csr_immediate;
     wire [11:0] func12, csr;
     wire [6:0] opcode;
