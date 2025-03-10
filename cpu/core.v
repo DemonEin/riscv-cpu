@@ -597,6 +597,152 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         next_program_counter = { base, 2'b0 };
     endtask
 
+    always @* begin
+        case (csr_address)
+            ADDRESS_MISA: begin
+                csr_read_value = {
+                    2'b01 /* MXL */,
+                    4'b0,
+                    26'b1 << 8 /* Extensions */
+                };
+            end
+            ADDRESS_MVENDORID: begin
+                csr_read_value = 0;
+            end
+            ADDRESS_MARCHID: begin
+                csr_read_value = 0;
+            end
+            ADDRESS_MIMPID: begin
+                csr_read_value = 0;
+            end
+            ADDRESS_MHARTID: begin
+                csr_read_value = 0;
+            end
+            ADDRESS_MSTATUS: begin
+                csr_read_value = {
+                    1'b0 /* SD */,
+                    8'b0 /* WPRI */,
+                    1'b0 /* TSR */,
+                    1'b0 /* TW */,
+                    1'b0 /* TVM */,
+                    1'b0 /* MXR */,
+                    1'b0 /* SUM */,
+                    1'b0 /* MPRV */,
+                    2'b0 /* XS */,
+                    2'b0 /* FS */,
+                    2'b11 /* MPP */,
+                    2'b0 /* VS */,
+                    1'b0 /* SPP */,
+                    mstatus_mpie,
+                    1'b0 /* UBE */,
+                    1'b0 /* SPIE */,
+                    1'b0 /* WPRI */,
+                    mstatus_mie,
+                    1'b0 /* WPRI */,
+                    1'b0 /* SIE */,
+                    1'b0 /* WPRI */
+                };
+            end
+            ADDRESS_MSTATUSH: begin
+                csr_read_value = {
+                    26'b0 /* WPRI */,
+                    1'b0 /* MBE */,
+                    1'b0 /* SBE */,
+                    4'b0 /* WPRI */
+                };
+            end
+            ADDRESS_MTVEC: begin
+                csr_read_value = {
+                    base,
+                    2'b0 /* MODE */
+                };
+            end
+            ADDRESS_MIP: begin
+                csr_read_value = {
+                    16'b0 /* platform defined */,
+                    2'b0,
+                    1'b0 /* LCOFIP */,
+                    1'b0,
+                    mip_meip,
+                    1'b0,
+                    1'b0 /* SEIP */,
+                    1'b0,
+                    mip_mtip,
+                    1'b0,
+                    1'b0 /* STIP */,
+                    1'b0,
+                    mip_msip,
+                    1'b0,
+                    1'b0 /* SSIP */,
+                    1'b0
+                };
+            end
+            ADDRESS_MIE: begin
+                csr_read_value = {
+                    16'b0 /* platform defined */,
+                    2'b0,
+                    1'b0 /* LCOFIE */,
+                    1'b0,
+                    mie_meie,
+                    1'b0,
+                    1'b0 /* SEIP */,
+                    1'b0,
+                    mie_mtie,
+                    1'b0,
+                    1'b0 /* STIP */,
+                    1'b0,
+                    mie_msie,
+                    1'b0,
+                    1'b0 /* SSIP */,
+                    1'b0
+                };
+            end
+            ADDRESS_MCYCLE: begin
+                csr_read_value = mcycle[31:0];
+            end
+            ADDRESS_MCYCLEH: begin
+                csr_read_value = mcycle[63:32];
+            end
+            ADDRESS_MINSTRET: begin
+                csr_read_value = minstret[31:0];
+            end
+            ADDRESS_MINSTRETH: begin
+                csr_read_value = minstret[63:32];
+            end
+            ADDRESS_MSCRATCH: begin
+                csr_read_value = mscratch;
+            end
+            ADDRESS_MEPC: begin
+                csr_read_value = { mepc, 2'b0 };
+            end
+            ADDRESS_MCAUSE: begin
+                csr_read_value = mcause;
+            end
+            ADDRESS_MTVAL: begin
+                csr_read_value = 0;
+            end
+            ADDRESS_MCONFIGPTR: begin
+                csr_read_value = 0;
+            end
+            ADDRESS_MENVCFG: begin
+                csr_read_value = menvcfg[31:0];
+            end
+            ADDRESS_MENVCFGH: begin
+                csr_read_value = menvcfg[63:32];
+            end
+            default: begin
+                if ((csr_address >= ADDRESS_MHPMCOUNTER3 && csr_address <= ADDRESS_MHPMCOUNTER31)
+                    || (csr_address >= ADDRESS_MHPMCOUNTER3H && csr_address <= ADDRESS_MHPMCOUNTER31H)
+                    || (csr_address >= ADDRESS_MHPMEVENT3 && csr_address <= ADDRESS_MHPMEVENT31)
+                    || (csr_address >= ADDRESS_MHPMEVENT3H && csr_address <= ADDRESS_MHPMEVENT31H)) begin
+                    csr_read_value = 0;
+                end else begin
+                    csr_read_value = 32'bx;
+                end
+            end
+        endcase
+    end
+
     `ifdef simulation
         always @* begin
             if (finish) begin
