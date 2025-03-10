@@ -80,6 +80,46 @@ localparam MCAUSE_ENVIRONMENT_CALL_FROM_M_MODE = 11;
 localparam MCAUSE_MACHINE_TIMER_INTERRUPT = (1 << 31) | 7;
 localparam MCAUSE_MACHINE_EXTERNAL_INTERRUPT = (1 << 31) | 11;
 
+localparam ADDRESS_MVENDORID = 12'hF11;
+localparam ADDRESS_MARCHID = 12'hF12;
+localparam ADDRESS_MIMPID = 12'hF13;
+localparam ADDRESS_MHARTID = 12'hF14;
+localparam ADDRESS_MCONFIGPTR = 12'hF15;
+
+localparam ADDRESS_MSTATUS = 12'h300;
+localparam ADDRESS_MISA = 12'h301;
+localparam ADDRESS_MIE = 12'h304;
+localparam ADDRESS_MTVEC = 12'h305;
+localparam ADDRESS_MCOUNTEREN = 12'h306;
+localparam ADDRESS_MSTATUSH = 12'h310;
+
+localparam ADDRESS_MSCRATCH = 12'h340;
+localparam ADDRESS_MEPC = 12'h341;
+localparam ADDRESS_MCAUSE = 12'h342;
+localparam ADDRESS_MTVAL = 12'h343;
+localparam ADDRESS_MIP = 12'h344;
+localparam ADDRESS_MTINST = 12'h34A;
+localparam ADDRESS_MTVAL2 = 12'h34B;
+
+localparam ADDRESS_MENVCFG = 12'h30A;
+localparam ADDRESS_MENVCFGH = 12'h31A;
+
+localparam ADDRESS_MHPMCOUNTER3 = 12'hB03;
+localparam ADDRESS_MHPMCOUNTER31 = 12'hB1F;
+localparam ADDRESS_MHPMCOUNTER3H = 12'hB83;
+localparam ADDRESS_MHPMCOUNTER31H = 12'hB9F;
+
+localparam ADDRESS_MHPMEVENT3 = 12'h323;
+localparam ADDRESS_MHPMEVENT31 = 12'h33F;
+localparam ADDRESS_MHPMEVENT3H = 12'h723;
+localparam ADDRESS_MHPMEVENT31H = 12'h73F;
+
+localparam ADDRESS_MCYCLE = 12'hB00;
+localparam ADDRESS_MINSTRET = 12'hB02;
+
+localparam ADDRESS_MCYCLEH = 12'hB80;
+localparam ADDRESS_MINSTRETH = 12'hB82;
+
 module core(clock, next_program_counter, program_memory_value, memory_address, memory_write_value, memory_write_sections, memory_read_value);
 
     input clock;
