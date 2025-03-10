@@ -26,7 +26,7 @@ module top(
 
     wire [31:0] memory_address, memory_write_value, memory_read_value, unshifted_memory_write_value, unshifted_memory_read_value;
     reg [31:0] program_memory_value, next_program_counter, block_ram_read_value, memory_mapped_register_read_value;
-    wire [2:0] memory_write_sections, block_ram_write_sections;
+    wire [2:0] memory_write_sections;
     reg read_memory_mapped_register;
 
     reg [63:0] mtime, mtimecmp;
@@ -52,12 +52,6 @@ module top(
     usb usb(clk48, usb_d_p, usb_d_n, usb_pullup, usb_packet_ready);
 
     initial $readmemh(`MEMORY_FILE, memory);
-
-    assign block_ram_write_sections = memory_address[31:2] == ADDRESS_MTIME[31:2]
-        || memory_address[31:2] == ADDRESS_MTIMEH[31:2]
-        || memory_address[31:2] == ADDRESS_MTIMECMP[31:2] 
-        || memory_address[31:2] == ADDRESS_MTIMECMPH[31:2] 
-        || addressing_usb_packet_buffer ? 0 : memory_write_sections;
 
     wire [2:0] usb_packet_buffer_write_sections = addressing_usb_packet_buffer ? memory_write_sections : 0;
 
@@ -105,14 +99,16 @@ module top(
         endcase
         pending_read_shift <= memory_address[1:0];
 
-        if (block_ram_write_sections[0]) begin
-            memory[memory_address[13:2]][7:0] <= memory_write_value[7:0];
-        end
-        if (block_ram_write_sections[1]) begin
-            memory[memory_address[13:2]][15:8] <= memory_write_value[15:8];
-        end
-        if (block_ram_write_sections[2]) begin
-            memory[memory_address[13:2]][31:16] <= memory_write_value[31:16];
+        if (memory_address < MEMORY_SIZE) begin
+            if (memory_write_sections[0]) begin
+                memory[memory_address[13:2]][7:0] <= memory_write_value[7:0];
+            end
+            if (memory_write_sections[1]) begin
+                memory[memory_address[13:2]][15:8] <= memory_write_value[15:8];
+            end
+            if (memory_write_sections[2]) begin
+                memory[memory_address[13:2]][31:16] <= memory_write_value[31:16];
+            end
         end
 
         case (memory_address[31:2])
