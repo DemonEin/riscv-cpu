@@ -92,6 +92,7 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready);
             STATE_SYNCING: begin
                 next_data_ready_counter = data_ready_counter + 1;
                 if (read_complete) begin
+                    // TODO do something different with mip_meip
                     if (read_bits[31:24] == 8'b10000000) begin
                         if (!top.core.mip_meip) begin
                             next_state = STATE_READING;

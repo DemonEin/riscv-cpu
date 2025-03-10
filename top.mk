@@ -81,5 +81,5 @@ readelf: $(target_directory)/a.out
 
 .PHONY: disassemble
 disassemble: $(target_directory)/a.out
-	$(gcc_binary_prefix)objdump -d $<
+	$(gcc_binary_prefix)objdump -D $<
 

@@ -3,6 +3,8 @@
 void wait();
 
 int main() {
+    morse("ieianfie");
+    while (1) {}
     while (1) {
         led = true;
         wait();

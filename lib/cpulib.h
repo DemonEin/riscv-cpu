@@ -5,6 +5,8 @@ typedef unsigned int u32;
 typedef long long i64;
 typedef unsigned long long u64;
 
+#define CLOCK_FREQUENCY 12000000
+
 #define MCAUSE_ILLEGAL_INSTRUCTION 2
 #define MCAUSE_BREAKPOINT 3
 #define MCAUSE_ENVIRONMENT_CALL_FROM_M_MODE 11
@@ -16,6 +18,8 @@ typedef unsigned long long u64;
 extern volatile bool led;
 
 void set_timer(u64);
+void sleep_for_clock_cycles(u32);
+void morse(const char*);
 
 // TODO make this a better API
 void enable_external_interrupts();
