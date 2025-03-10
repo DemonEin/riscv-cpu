@@ -131,7 +131,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     // half-word high byte, LSB means write low byte
     output reg [2:0] memory_write_sections;
 
-    wire [31:0] instruction, alu_result, next_instruction_address, base_register_read_value_1, base_register_read_value_2, csr_read_value;
+    wire [31:0] instruction, alu_result, next_instruction_address, base_register_read_value_1, base_register_read_value_2;
     wire [31:0] i_immediate, s_immediate, b_immediate, u_immediate, j_immediate, csr_immediate;
     wire [11:0] func12, csr;
     wire [6:0] opcode;
@@ -140,7 +140,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     wire comparator_result;
     wire csr_is_read_only;
 
-    reg [31:0] program_counter, register_write_value_1, register_write_value_2, register_read_value_1, register_read_value_2, alu_operand_1, alu_operand_2, comparator_operand_1, comparator_operand_2, csr_write_value;
+    reg [31:0] program_counter, register_write_value_1, register_write_value_2, register_read_value_1, register_read_value_2, alu_operand_1, alu_operand_2, comparator_operand_1, comparator_operand_2, csr_write_value, csr_read_value;
     initial program_counter = `INITIAL_PROGRAM_COUNTER;
     reg [11:0] csr_address;
     reg [4:0] register_write_address_1, register_write_address_2, load_register, pending_load_register;
@@ -149,10 +149,65 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     reg csr_write_enable;
 
     reg trap;
-    reg [31:0] mcause;
+    reg [31:0] next_mcause;
     reg return_from_trap;
     reg stall = 1;
     reg clear_mip_meip;
+
+    // machine interrupt enable
+    reg mstatus_mie = 0;
+    // machine prior interrupt enable
+    reg mstatus_mpie;
+
+    reg [29:0] base;
+
+    // machine interrupt pending
+    // machine external interrupt pending
+    reg mip_meip;
+    // machine timer interrupt pending
+    wire mip_mtip = top.mtime >= top.mtimecmp;
+
+    // machine software interrupt pending
+    reg mip_msip;
+
+    // machine interrupt enable
+    // machine external interrupt enable
+    reg mie_meie;
+    // machine timer interrupt enable
+    reg mie_mtie;
+    // machine software interrupt enable
+    reg mie_msie;
+
+    reg [63:0] mcycle = 0;
+    reg [63:0] minstret = 0;
+
+    reg [31:0] mscratch;
+
+    // machine exception program counter
+    reg [29:0] mepc;
+
+    reg [31:0] mcause = 0;
+
+    reg previous_usb_packet_ready = 0;
+
+    wire [63:0] next_mcycle = mcycle + 1;
+
+    wire [63:0] next_minstret = core.stall || core.trap ? minstret : minstret + 1;;
+
+    wire [63:0] menvcfg = {
+        1'b0 /* STCE */,
+        1'b0 /* PBMTE */,
+        1'b0 /* ADUE */,
+        1'b0 /* CDE */,
+        26'b0 /* WPRI */,
+        2'b0 /* PMM */,
+        24'b0 /* WPRI */,
+        1'b0 /* CBZE */,
+        1'b0 /* CBCFE */,
+        2'b0 /* CBIE */,
+        3'b0 /* WPRI */,
+        1'b0 /* FIOM */
+    };
 
     `ifdef simulation
         reg finish;
@@ -238,7 +293,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         register_read_value_2 = base_register_read_value_2;
 
         trap = 1'b0;
-        mcause = 32'bx;
+        next_mcause = 32'bx;
         return_from_trap = 1'b0;
         clear_mip_meip = 0;
 
@@ -270,9 +325,9 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
             register_write_value_2 = 32'bx;
         end
 
-        if (control_status_registers.mstatus_mie && control_status_registers.mie_mtie && control_status_registers.mip_mtip) begin
+        if (mstatus_mie && mie_mtie && mip_mtip) begin
             raise(MCAUSE_MACHINE_TIMER_INTERRUPT);
-        end else if (control_status_registers.mstatus_mie && control_status_registers.mie_meie && control_status_registers.mip_meip) begin
+        end else if (mstatus_mie && mie_meie && mip_meip) begin
             raise(MCAUSE_MACHINE_EXTERNAL_INTERRUPT);
         end else if (!stall) begin
             next_program_counter = next_instruction_address;
@@ -413,7 +468,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                     end
                                     FUNC12_MRET: begin
                                         return_from_trap = 1;
-                                        next_program_counter = { control_status_registers.mepc, 2'b0 };
+                                        next_program_counter = { mepc, 2'b0 };
                                     end
                                     FUNC12_WFI: begin
                                         // nop
@@ -532,14 +587,14 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         load_register <= pending_load_register;
         load_funct3 <= pending_load_funct3;
         if (clear_mip_meip) begin
-            control_status_registers.mip_meip <= 0;
+            mip_meip <= 0;
         end
     end
 
     task raise(input [31:0] _mcause);
         trap = 1;
-        mcause = _mcause;
-        next_program_counter = { control_status_registers.base, 2'b0 };
+        next_mcause = _mcause;
+        next_program_counter = { base, 2'b0 };
     endtask
 
     `ifdef simulation

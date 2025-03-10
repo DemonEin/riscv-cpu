@@ -93,7 +93,7 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready);
                 next_data_ready_counter = data_ready_counter + 1;
                 if (read_complete) begin
                     if (read_bits[31:24] == 8'b10000000) begin
-                        if (!top.core.control_status_registers.mip_meip) begin
+                        if (!top.core.mip_meip) begin
                             next_state = STATE_READING;
                             next_bits_to_read = 32;
                             next_buffer_write_index = 0;
