@@ -149,7 +149,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     reg csr_write_enable;
 
     reg trap;
-    reg [31:0] next_mcause;
+    reg [31:0] trap_mcause;
     reg return_from_trap;
     reg stall = 1;
     reg clear_mip_meip;
@@ -293,7 +293,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         register_read_value_2 = base_register_read_value_2;
 
         trap = 1'b0;
-        next_mcause = 32'bx;
+        trap_mcause = 32'bx;
         return_from_trap = 1'b0;
         clear_mip_meip = 0;
 
@@ -589,11 +589,73 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         if (clear_mip_meip) begin
             mip_meip <= 0;
         end
+
+        if (trap) begin
+            mcause <= trap_mcause;
+            mepc <= program_counter[31:2];
+            mstatus_mpie <= mstatus_mie;
+            mstatus_mie <= 0;
+        end else if (return_from_trap) begin
+            mstatus_mie <= mstatus_mpie;
+            mstatus_mpie <= 1;
+        end else if (csr_write_enable) begin
+            case (csr_address)
+                ADDRESS_MSTATUS: begin
+                    mstatus_mie <= csr_write_value[3];
+                    mstatus_mpie <= csr_write_value[7];
+                end
+                ADDRESS_MTVEC: begin
+                    base <= csr_write_value[31:2];
+                end
+                ADDRESS_MIP: begin
+                    // all are read-only
+                end
+                ADDRESS_MIE: begin
+                    // this could be read-only, TODO consider
+                    mie_msie <= csr_write_value[3];
+                    mie_mtie <= csr_write_value[7];
+                    mie_meie <= csr_write_value[11];
+                end
+                ADDRESS_MSCRATCH: begin
+                    mscratch <= csr_write_value;
+                end
+                ADDRESS_MEPC: begin
+                    mepc <= csr_write_value[31:2];
+                end
+                ADDRESS_MCAUSE: begin
+                    mcause <= csr_write_value;
+                end
+                default: begin
+                end
+            endcase
+        end
+
+        if (csr_write_enable) begin
+            case (csr_address)
+                ADDRESS_MCYCLE: mcycle[31:0] <= csr_write_value;
+                ADDRESS_MCYCLEH: mcycle[63:32] <= csr_write_value;
+                default: mcycle <= next_mcycle;
+            endcase
+
+            case (csr_address)
+                ADDRESS_MINSTRET: minstret[31:0] <= csr_write_value;
+                ADDRESS_MINSTRETH: minstret[63:32] <= csr_write_value;
+                default: minstret <= next_minstret;
+            endcase
+        end else begin
+            mcycle <= next_mcycle;
+            minstret <= next_minstret;
+        end
+
+        previous_usb_packet_ready <= usb.packet_ready;
+        if (usb.packet_ready && (!previous_usb_packet_ready)) begin
+            mip_meip <= 1;
+        end
     end
 
     task raise(input [31:0] _mcause);
         trap = 1;
-        next_mcause = _mcause;
+        trap_mcause = _mcause;
         next_program_counter = { base, 2'b0 };
     endtask
 
