@@ -1,3 +1,5 @@
+#include <stdbool.h>
+
 typedef int i32;
 typedef unsigned int u32;
 typedef long long i64;
@@ -11,9 +13,9 @@ typedef unsigned long long u64;
 
 #define PACKET_BUFFER_ADDRESS 0xc0000000
 
+extern volatile bool led;
+
 void set_timer(u64);
-void led_on();
-void led_off();
 
 // TODO make this a better API
 void enable_external_interrupts();

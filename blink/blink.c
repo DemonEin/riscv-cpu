@@ -4,9 +4,9 @@ void wait();
 
 int main() {
     while (1) {
-        led_on();
+        led = true;
         wait();
-        led_off();
+        led = false;
         wait();
     }
 

@@ -1,3 +1,5 @@
+led = 0x80000010;
+
 MEMORY {
     sram (wx) : ORIGIN = 0, LENGTH = 0x1000
 }

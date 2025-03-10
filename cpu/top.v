@@ -4,7 +4,7 @@ localparam ADDRESS_MTIME = 32'h80000000;
 localparam ADDRESS_MTIMEH = ADDRESS_MTIME + 4;
 localparam ADDRESS_MTIMECMP = ADDRESS_MTIMEH + 4;
 localparam ADDRESS_MTIMECMPH = ADDRESS_MTIMECMP + 4;
-localparam ADDRESS_LED = ADDRESS_MTIMECMPH + 4;
+localparam ADDRESS_LED = 32'h80000010;
 localparam ADDRESS_USB_PACKET_BUFFER = 32'hc0000000;
 
 localparam USB_PACKET_BUFFER_SIZE = 1024; // in bytes
@@ -162,7 +162,7 @@ module top(
             end
         endcase
 
-        if (memory_address[31:2] == ADDRESS_LED[31:2]) begin
+        if (memory_address == ADDRESS_LED && memory_write_sections[0]) begin
             led_on <= memory_write_value[0];
         end
     end
