@@ -780,6 +780,8 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     end
 
     `ifdef simulation
+        reg [31:0] core_file;
+
         always @* begin
             if (finish) begin
                 $finish;
@@ -788,7 +790,55 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
 
         always @* begin
             if (error) begin
+                $display("got fail instruction");
+                $display("pc: 0x%h", program_counter);
+                $display("registers (decimal/hex):");
+                $display("    ra: %d/0x%h", registers.r[1], registers.r[1]);
+                $display("    sp: %d/0x%h", registers.r[2], registers.r[2]);
+                $display("    gp: %d/0x%h", registers.r[3], registers.r[3]);
+                $display("    tp: %d/0x%h", registers.r[4], registers.r[4]);
+                $display("    t0: %d/0x%h", registers.r[5], registers.r[5]);
+                $display("    t1: %d/0x%h", registers.r[6], registers.r[6]);
+                $display("    t2: %d/0x%h", registers.r[7], registers.r[7]);
+                $display("    s0: %d/0x%h", registers.r[8], registers.r[8]);
+                $display("    s1: %d/0x%h", registers.r[9], registers.r[9]);
+                $display("    a0: %d/0x%h", registers.r[10], registers.r[10]);
+                $display("    a1: %d/0x%h", registers.r[11], registers.r[11]);
+                $display("    a2: %d/0x%h", registers.r[12], registers.r[12]);
+                $display("    a3: %d/0x%h", registers.r[13], registers.r[13]);
+                $display("    a4: %d/0x%h", registers.r[14], registers.r[14]);
+                $display("    a5: %d/0x%h", registers.r[15], registers.r[15]);
+                $display("    a6: %d/0x%h", registers.r[16], registers.r[16]);
+                $display("    a7: %d/0x%h", registers.r[17], registers.r[17]);
+                $display("    s2: %d/0x%h", registers.r[18], registers.r[18]);
+                $display("    s3: %d/0x%h", registers.r[19], registers.r[19]);
+                $display("    s4: %d/0x%h", registers.r[20], registers.r[20]);
+                $display("    s5: %d/0x%h", registers.r[21], registers.r[21]);
+                $display("    s6: %d/0x%h", registers.r[22], registers.r[22]);
+                $display("    s7: %d/0x%h", registers.r[23], registers.r[23]);
+                $display("    s8: %d/0x%h", registers.r[24], registers.r[24]);
+                $display("    s9: %d/0x%h", registers.r[25], registers.r[25]);
+                $display("    s10: %d/0x%h", registers.r[26], registers.r[26]);
+                $display("    s11: %d/0x%h", registers.r[27], registers.r[27]);
+                $display("    t3: %d/0x%h", registers.r[28], registers.r[28]);
+                $display("    t4: %d/0x%h", registers.r[29], registers.r[29]);
+                $display("    t5: %d/0x%h", registers.r[30], registers.r[30]);
+                $display("    t6: %d/0x%h", registers.r[31], registers.r[31]);
+
+                core_file = $fopen("core", "w");
+                if (core_file != 0) begin
+                    for (reg [31:0] i = 0; i < MEMORY_SIZE; i = i + 1) begin
+                        $fwriteb(core_file, "%u", top.memory[i]);
+                    end
+                    $display("core written to ./core");
+                    $fclose(core_file);
+                end else begin
+                    $display("could not create core file");
+                end
+
                 $stop;
+            end else begin
+                core_file = 32'bx;
             end
         end
     `endif
