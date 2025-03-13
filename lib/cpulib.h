@@ -1,9 +1,15 @@
 #include <stdbool.h>
 
-typedef int i32;
-typedef unsigned int u32;
-typedef long long i64;
-typedef unsigned long long u64;
+// using ILP32 convention
+typedef signed char int8_t;
+typedef short int16_t;
+typedef int int32_t;
+typedef long long int64_t;
+
+typedef unsigned char uint8_t;
+typedef unsigned short uint16_t;
+typedef unsigned int uint32_t;
+typedef unsigned long long uint64_t;
 
 #define CLOCK_FREQUENCY 12000000
 
@@ -17,8 +23,8 @@ typedef unsigned long long u64;
 
 extern volatile bool led;
 
-void set_timer(u64);
-void sleep_for_clock_cycles(u32);
+void set_timer(uint64_t);
+void sleep_for_clock_cycles(uint32_t);
 void morse(const char*);
 
 // TODO make this a better API

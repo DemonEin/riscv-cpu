@@ -1,9 +1,9 @@
 #include "cpulib.h"
 #include "stdbool.h"
 
-volatile u64* timer_cmp = (u64*) 0x80000000 + 8;
+volatile uint64_t* timer_cmp = (uint64_t*) 0x80000000 + 8;
 
-void set_timer(u64 time) {
+void set_timer(uint64_t time) {
     *timer_cmp = *timer_cmp + time;
     int set_val = 1 << 7;
     asm("csrrs zero, mie, %0" : : "r" (set_val));
@@ -11,13 +11,13 @@ void set_timer(u64 time) {
     asm("csrrs zero, mstatus, %0" : : "r" (set_val));
 }
 
-void sleep_ms(u32 time) {
+void sleep_ms(uint32_t time) {
     sleep_for_clock_cycles(time * (CLOCK_FREQUENCY / 1000));
 }
 
 #define MORSE_TIME_UNIT 200 // in ms
 
-void morse_sleep(u32 time_units) {
+void morse_sleep(uint32_t time_units) {
     sleep_ms(MORSE_TIME_UNIT * time_units);
 }
 
