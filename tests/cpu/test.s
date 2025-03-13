@@ -46,6 +46,13 @@ main:
     lw x2, 0(x0)
     bne x1, x2, fail
 
+    # test non-word-aligned single byte store
+    li t0, 0x101
+    li a0, 57
+    sb a0, (t0)
+    lbu t1, (t0)
+    bne t1, a0, fail
+
     # test csr's
     li x1, 0
     csrrw x1, misa, x0

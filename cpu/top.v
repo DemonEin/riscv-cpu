@@ -26,7 +26,7 @@ module top(
 
     wire [31:0] memory_address, memory_write_value, memory_read_value, unshifted_memory_write_value, unshifted_memory_read_value;
     reg [31:0] program_memory_value, next_program_counter, block_ram_read_value, memory_mapped_register_read_value;
-    wire [2:0] memory_write_sections;
+    wire [2:0] unshifted_memory_write_sections;
     reg read_memory_mapped_register;
 
     reg [63:0] mtime, mtimecmp;
@@ -48,12 +48,13 @@ module top(
     wire usb_packet_ready;
     wire addressing_usb_packet_buffer = memory_address >= ADDRESS_USB_PACKET_BUFFER && memory_address < (ADDRESS_USB_PACKET_BUFFER + USB_PACKET_BUFFER_SIZE);
 
-    core core(clk24, next_program_counter, program_memory_value, memory_address, unshifted_memory_write_value, memory_write_sections, memory_read_value);
+    core core(clk24, next_program_counter, program_memory_value, memory_address, unshifted_memory_write_value, unshifted_memory_write_sections, memory_read_value);
     usb usb(clk48, usb_d_p, usb_d_n, usb_pullup, usb_packet_ready);
 
     initial $readmemh(`MEMORY_FILE, memory);
 
-    wire [2:0] usb_packet_buffer_write_sections = addressing_usb_packet_buffer ? memory_write_sections : 0;
+    wire [3:0] usb_packet_buffer_write_sections = addressing_usb_packet_buffer ? memory_write_sections : 0;
+    wire [3:0] memory_write_sections = { {2{unshifted_memory_write_sections[2]}}, unshifted_memory_write_sections[1:0] } << memory_address[1:0];
 
     assign rgb_led0_r = ~led_on;
     assign rgb_led0_g = ~led_on;
@@ -107,7 +108,10 @@ module top(
                 memory[memory_address[13:2]][15:8] <= memory_write_value[15:8];
             end
             if (memory_write_sections[2]) begin
-                memory[memory_address[13:2]][31:16] <= memory_write_value[31:16];
+                memory[memory_address[13:2]][23:16] <= memory_write_value[23:16];
+            end
+            if (memory_write_sections[3]) begin
+                memory[memory_address[13:2]][31:24] <= memory_write_value[31:24];
             end
         end
 
@@ -120,7 +124,10 @@ module top(
                     mtime[15:8] <= memory_write_value[15:8];
                 end
                 if (memory_write_sections[2]) begin
-                    mtime[31:16] <= memory_write_value[31:16];
+                    mtime[23:16] <= memory_write_value[23:16];
+                end
+                if (memory_write_sections[3]) begin
+                    mtime[31:24] <= memory_write_value[31:24];
                 end
             end
             ADDRESS_MTIMEH[31:2]: begin
@@ -131,7 +138,10 @@ module top(
                     mtime[47:40] <= memory_write_value[15:8];
                 end
                 if (memory_write_sections[2]) begin
-                    mtime[63:48] <= memory_write_value[31:16];
+                    mtime[55:48] <= memory_write_value[23:16];
+                end
+                if (memory_write_sections[3]) begin
+                    mtime[63:56] <= memory_write_value[31:24];
                 end
             end
             default: mtime <= mtime + 1;
@@ -146,7 +156,10 @@ module top(
                     mtimecmp[15:8] <= memory_write_value[15:8];
                 end
                 if (memory_write_sections[2]) begin
-                    mtimecmp[31:16] <= memory_write_value[31:16];
+                    mtimecmp[23:16] <= memory_write_value[23:16];
+                end
+                if (memory_write_sections[3]) begin
+                    mtimecmp[31:24] <= memory_write_value[31:24];
                 end
             end
             ADDRESS_MTIMECMPH[31:2]: begin
@@ -157,7 +170,10 @@ module top(
                     mtimecmp[47:40] <= memory_write_value[15:8];
                 end
                 if (memory_write_sections[2]) begin
-                    mtimecmp[63:48] <= memory_write_value[31:16];
+                    mtimecmp[55:48] <= memory_write_value[23:16];
+                end
+                if (memory_write_sections[3]) begin
+                    mtimecmp[63:56] <= memory_write_value[31:24];
                 end
             end
         endcase
