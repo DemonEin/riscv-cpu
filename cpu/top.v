@@ -87,6 +87,10 @@ module top(
                 memory_mapped_register_read_value <= mtimecmp[63:32];
                 read_memory_mapped_register <= 1;
             end
+            ADDRESS_LED[31:2]: begin
+                memory_mapped_register_read_value <= { 31'b0, led_on };
+                read_memory_mapped_register <= 1;
+            end
             default: begin
                 if (addressing_usb_packet_buffer) begin
                     // the usb packet buffer isn't a register but whatever
