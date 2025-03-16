@@ -120,12 +120,13 @@ localparam ADDRESS_MINSTRET = 12'hB02;
 localparam ADDRESS_MCYCLEH = 12'hB80;
 localparam ADDRESS_MINSTRETH = 12'hB82;
 
-module core(clock, next_program_counter, program_memory_value, memory_address, memory_write_value, memory_write_sections, memory_read_value, usb_packet_ready, handled_usb_packet);
+module core(clock, next_program_counter, program_memory_value, memory_address, memory_write_value, memory_write_sections, memory_read_value, usb_packet_ready, handled_usb_packet, mip_mtip);
 
     input clock;
     input [31:0] program_memory_value;
     input [31:0] memory_read_value;
     input usb_packet_ready;
+    input mip_mtip; // machine timer interrupt pending
 
     output reg [31:0] next_program_counter, memory_address, memory_write_value;
     // MSB 1 means write high half-word, middle bit 1 means write low
@@ -165,7 +166,6 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     // machine interrupt pending
     // machine external interrupt pending
     wire mip_meip = usb_packet_ready;
-    wire mip_mtip = top.mtime >= top.mtimecmp;
 
     // machine software interrupt pending
     reg mip_msip;
