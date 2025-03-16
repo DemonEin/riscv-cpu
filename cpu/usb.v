@@ -10,19 +10,23 @@ localparam EOP_NEED_SE0_0 = 0;
 localparam EOP_NEED_SE0_1 = 1;
 localparam EOP_NEED_J = 2;
 
-module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready);
+module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready, packet_buffer_address, packet_buffer_read_value, packet_buffer_write_value, write_to_packet_buffer);
     input clock48;
+    input [31:0] packet_buffer_read_value;
 
     inout usb_d_p, usb_d_n;
 
     output usb_pullup;
     assign usb_pullup = 1;
+    output reg [$clog2(USB_PACKET_BUFFER_SIZE / 4) - 1:0] packet_buffer_address = 0;
+    output reg write_to_packet_buffer;
+    output reg [31:0] packet_buffer_write_value;
 
     output reg packet_ready = 0;
     reg next_packet_ready;
 
     reg [$clog2(32):0] bits_to_read, next_bits_to_read;
-    reg [$clog2(1024/4) - 1:0] buffer_write_index = 0, next_buffer_write_index;
+    reg [$clog2(USB_PACKET_BUFFER_SIZE / 4) - 1:0] next_packet_buffer_address;
 
     reg [3:0] state = STATE_POWERED, next_state;
     reg [2:0] eop_state;
@@ -47,9 +51,6 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready);
     wire decoded_data = nzri_decoded_data; // only defined when !skip_bit
     // bits are sent least-significant bit first
     reg [31:0] read_bits; // these are the last 32 decoded bits
-    reg [31:0] bits_to_write;
-
-    reg write_to_packet_buffer;
 
     // needs to hold one reset time, TODO could be smaller
     reg [31:0] reset_counter = 0;
@@ -57,9 +58,9 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready);
     always @* begin
         next_state = state;
         write_to_packet_buffer = 0;
-        next_buffer_write_index = buffer_write_index;
+        next_packet_buffer_address = packet_buffer_address;
         next_packet_ready = packet_ready;
-        bits_to_write = read_bits;
+        packet_buffer_write_value = read_bits;
 
         if (data_ready) begin
             next_previous_data = data;
@@ -96,7 +97,7 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready);
                         if (!top.core.mip_meip) begin
                             next_state = STATE_READING;
                             next_bits_to_read = 32;
-                            next_buffer_write_index = 0;
+                            next_packet_buffer_address = 0;
                         end else begin
                             next_state = STATE_IGNORE_PACKET;
                         end
@@ -113,15 +114,15 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready);
                     // end of packet
                     next_state = STATE_READ_COMPLETE;
                     write_to_packet_buffer = 1;
-                    bits_to_write = read_bits >> bits_to_read;
+                    packet_buffer_write_value = read_bits >> bits_to_read;
                 end else if (read_complete) begin
                     write_to_packet_buffer = 1;
 
-                    if (buffer_write_index == 8'hFF) begin
+                    if (packet_buffer_address == 8'hFF) begin
                         next_packet_ready = 1;
                         next_state = STATE_READ_COMPLETE;
                     end
-                    next_buffer_write_index = buffer_write_index + 1;
+                    next_packet_buffer_address = packet_buffer_address + 1;
                     next_bits_to_read = 32;
                 end
             end
@@ -153,15 +154,9 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready);
 
         state <= next_state;
         data_ready_counter <= next_data_ready_counter;
-        buffer_write_index <= next_buffer_write_index;
+        packet_buffer_address <= next_packet_buffer_address;
         packet_ready <= next_packet_ready;
         bits_to_read <= next_bits_to_read;
-        buffer_write_index <= next_buffer_write_index;
-        packet_ready <= next_packet_ready;
         previous_data <= next_previous_data;
-
-        if (write_to_packet_buffer) begin
-            top.usb_packet_buffer[buffer_write_index] <= bits_to_write;
-        end
     end
 endmodule

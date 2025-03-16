@@ -24,10 +24,11 @@ module top(
     // I confirmed on hardware that the observed clock is 24 mhz
     reg clk24 = 0;
 
-    wire [31:0] memory_address, memory_write_value, memory_read_value, unshifted_memory_write_value, unshifted_memory_read_value;
+    wire [31:0] memory_address, memory_write_value, memory_read_value, unshifted_memory_write_value, unshifted_memory_read_value, usb_packet_buffer_write_value, usb_packet_buffer_read_value, usb_module_usb_packet_buffer_write_value;
     reg [31:0] program_memory_value, next_program_counter, block_ram_read_value, memory_mapped_register_read_value;
     wire [2:0] unshifted_memory_write_sections;
-    reg read_memory_mapped_register;
+    wire [$clog2(USB_PACKET_BUFFER_SIZE/4) - 1:0] usb_packet_buffer_address;
+    reg read_memory_mapped_register, write_to_usb_packet_buffer;
 
     reg [63:0] mtime, mtimecmp;
 
@@ -43,17 +44,17 @@ module top(
     // needed because of parsing errors that happen only in yosys when I do
     // either of these inline
     wire [31:0] usb_address_base = (memory_address - ADDRESS_USB_PACKET_BUFFER);
-    wire [7:0] usb_address = usb_address_base[9:2];
+    wire [7:0] usb_address = addressing_usb_packet_buffer ? usb_address_base[9:2] : usb_packet_buffer_address;
 
     wire usb_packet_ready;
     wire addressing_usb_packet_buffer = memory_address >= ADDRESS_USB_PACKET_BUFFER && memory_address < (ADDRESS_USB_PACKET_BUFFER + USB_PACKET_BUFFER_SIZE);
 
     core core(clk24, next_program_counter, program_memory_value, memory_address, unshifted_memory_write_value, unshifted_memory_write_sections, memory_read_value);
-    usb usb(clk48, usb_d_p, usb_d_n, usb_pullup, usb_packet_ready);
+    usb usb(clk48, usb_d_p, usb_d_n, usb_pullup, usb_packet_ready, usb_packet_buffer_address, usb_packet_buffer_read_value, usb_module_usb_packet_buffer_write_value, write_to_usb_packet_buffer);
 
     initial $readmemh(`MEMORY_FILE, memory);
 
-    wire [3:0] usb_packet_buffer_write_sections = addressing_usb_packet_buffer ? memory_write_sections : 0;
+    wire [3:0] usb_packet_buffer_write_sections = addressing_usb_packet_buffer ? memory_write_sections : write_to_usb_packet_buffer ? 4'b1111 : 0;
     wire [3:0] memory_write_sections = { {2{unshifted_memory_write_sections[2]}}, unshifted_memory_write_sections[1:0] } << memory_address[1:0];
 
     assign rgb_led0_r = ~led_on;
@@ -64,6 +65,7 @@ module top(
     // these shifts work due to requiring natural alignment of memory accesses
     assign memory_read_value = unshifted_memory_read_value >> (pending_read_shift * 8);
     assign memory_write_value = unshifted_memory_write_value << (memory_address[1:0] * 8);
+    assign usb_packet_buffer_write_value = addressing_usb_packet_buffer ? memory_write_value : usb_module_usb_packet_buffer_write_value;
 
     always @(posedge clk24) begin
         program_memory_value <= memory[next_program_counter[13:2]];
@@ -189,13 +191,16 @@ module top(
 
     always @(posedge clk48) begin
         if (usb_packet_buffer_write_sections[0]) begin
-            usb_packet_buffer[usb_address][7:0] <= memory_write_value[7:0];
+            usb_packet_buffer[usb_address][7:0] <= usb_packet_buffer_write_value[7:0];
         end
         if (usb_packet_buffer_write_sections[1]) begin
-            usb_packet_buffer[usb_address][15:8] <= memory_write_value[15:8];
+            usb_packet_buffer[usb_address][15:8] <= usb_packet_buffer_write_value[15:8];
         end
         if (usb_packet_buffer_write_sections[2]) begin
-            usb_packet_buffer[usb_address][31:16] <= memory_write_value[31:16];
+            usb_packet_buffer[usb_address][23:16] <= usb_packet_buffer_write_value[23:16];
+        end
+        if (usb_packet_buffer_write_sections[3]) begin
+            usb_packet_buffer[usb_address][31:24] <= usb_packet_buffer_write_value[31:24];
         end
     end
 
