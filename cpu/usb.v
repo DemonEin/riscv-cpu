@@ -10,9 +10,10 @@ localparam EOP_NEED_SE0_0 = 0;
 localparam EOP_NEED_SE0_1 = 1;
 localparam EOP_NEED_J = 2;
 
-module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready, packet_buffer_address, packet_buffer_read_value, packet_buffer_write_value, write_to_packet_buffer);
+module usb(clock48, usb_d_p, usb_d_n, usb_pullup, got_usb_packet, packet_buffer_address, packet_buffer_read_value, packet_buffer_write_value, write_to_packet_buffer, usb_packet_ready);
     input clock48;
     input [31:0] packet_buffer_read_value;
+    input usb_packet_ready;
 
     inout usb_d_p, usb_d_n;
 
@@ -21,9 +22,7 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready, packet_buffer_ad
     output reg [$clog2(USB_PACKET_BUFFER_SIZE / 4) - 1:0] packet_buffer_address = 0;
     output reg write_to_packet_buffer;
     output reg [31:0] packet_buffer_write_value;
-
-    output reg packet_ready = 0;
-    reg next_packet_ready;
+    output reg got_usb_packet;
 
     reg [$clog2(32):0] bits_to_read, next_bits_to_read;
     reg [$clog2(USB_PACKET_BUFFER_SIZE / 4) - 1:0] next_packet_buffer_address;
@@ -59,8 +58,8 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready, packet_buffer_ad
         next_state = state;
         write_to_packet_buffer = 0;
         next_packet_buffer_address = packet_buffer_address;
-        next_packet_ready = packet_ready;
         packet_buffer_write_value = read_bits;
+        got_usb_packet = 0;
 
         if (data_ready) begin
             next_previous_data = data;
@@ -94,7 +93,7 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready, packet_buffer_ad
                 next_data_ready_counter = data_ready_counter + 1;
                 if (read_complete) begin
                     if (read_bits[31:24] == 8'b10000000) begin
-                        if (!top.core.mip_meip) begin
+                        if (!usb_packet_ready) begin
                             next_state = STATE_READING;
                             next_bits_to_read = 32;
                             next_packet_buffer_address = 0;
@@ -119,7 +118,7 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready, packet_buffer_ad
                     write_to_packet_buffer = 1;
 
                     if (packet_buffer_address == 8'hFF) begin
-                        next_packet_ready = 1;
+                        got_usb_packet = 1;
                         next_state = STATE_READ_COMPLETE;
                     end
                     next_packet_buffer_address = packet_buffer_address + 1;
@@ -155,7 +154,6 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, packet_ready, packet_buffer_ad
         state <= next_state;
         data_ready_counter <= next_data_ready_counter;
         packet_buffer_address <= next_packet_buffer_address;
-        packet_ready <= next_packet_ready;
         bits_to_read <= next_bits_to_read;
         previous_data <= next_previous_data;
     end

@@ -120,16 +120,18 @@ localparam ADDRESS_MINSTRET = 12'hB02;
 localparam ADDRESS_MCYCLEH = 12'hB80;
 localparam ADDRESS_MINSTRETH = 12'hB82;
 
-module core(clock, next_program_counter, program_memory_value, memory_address, memory_write_value, memory_write_sections, memory_read_value);
+module core(clock, next_program_counter, program_memory_value, memory_address, memory_write_value, memory_write_sections, memory_read_value, usb_packet_ready, handled_usb_packet);
 
     input clock;
     input [31:0] program_memory_value;
     input [31:0] memory_read_value;
+    input usb_packet_ready;
 
     output reg [31:0] next_program_counter, memory_address, memory_write_value;
     // MSB 1 means write high half-word, middle bit 1 means write low
     // half-word high byte, LSB means write low byte
     output reg [2:0] memory_write_sections;
+    output reg handled_usb_packet;
 
     wire [31:0] instruction, alu_result, next_instruction_address, base_register_read_value_1, base_register_read_value_2;
     wire [31:0] i_immediate, s_immediate, b_immediate, u_immediate, j_immediate, csr_immediate;
@@ -152,7 +154,6 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
     reg [31:0] trap_mcause;
     reg return_from_trap;
     reg stall = 1;
-    reg clear_mip_meip;
 
     // machine interrupt enable
     reg mstatus_mie = 0;
@@ -163,8 +164,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
 
     // machine interrupt pending
     // machine external interrupt pending
-    reg mip_meip;
-    // machine timer interrupt pending
+    wire mip_meip = usb_packet_ready;
     wire mip_mtip = top.mtime >= top.mtimecmp;
 
     // machine software interrupt pending
@@ -269,7 +269,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         trap = 1'b0;
         trap_mcause = 32'bx;
         return_from_trap = 1'b0;
-        clear_mip_meip = 0;
+        handled_usb_packet = 0;
 
         next_program_counter = program_counter;
 
@@ -450,7 +450,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
                                     // custom instruction for telling the usb
                                     // hardware the packet has been handled
                                     FUNC12_CLEAR_USB_INTERRUPT: begin
-                                        clear_mip_meip = 1;
+                                        handled_usb_packet = 1;
                                     end
                                     `ifdef simulation 
                                         // custom instructions for running tests
@@ -560,9 +560,6 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         stall <= 0;
         load_register <= pending_load_register;
         load_funct3 <= pending_load_funct3;
-        if (clear_mip_meip) begin
-            mip_meip <= 0;
-        end
 
         if (trap) begin
             mcause <= trap_mcause;
@@ -619,11 +616,6 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
         end else begin
             mcycle <= next_mcycle;
             minstret <= next_minstret;
-        end
-
-        previous_usb_packet_ready <= usb.packet_ready;
-        if (usb.packet_ready && (!previous_usb_packet_ready)) begin
-            mip_meip <= 1;
         end
     end
 

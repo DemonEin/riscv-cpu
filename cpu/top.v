@@ -46,11 +46,14 @@ module top(
     wire [31:0] usb_address_base = (memory_address - ADDRESS_USB_PACKET_BUFFER);
     wire [7:0] usb_address = addressing_usb_packet_buffer ? usb_address_base[9:2] : usb_packet_buffer_address;
 
-    wire usb_packet_ready;
+    reg usb_packet_ready;
+    wire handled_usb_packet;
+    wire got_usb_packet;
+
     wire addressing_usb_packet_buffer = memory_address >= ADDRESS_USB_PACKET_BUFFER && memory_address < (ADDRESS_USB_PACKET_BUFFER + USB_PACKET_BUFFER_SIZE);
 
-    core core(clk24, next_program_counter, program_memory_value, memory_address, unshifted_memory_write_value, unshifted_memory_write_sections, memory_read_value);
-    usb usb(clk48, usb_d_p, usb_d_n, usb_pullup, usb_packet_ready, usb_packet_buffer_address, usb_packet_buffer_read_value, usb_module_usb_packet_buffer_write_value, write_to_usb_packet_buffer);
+    core core(clk24, next_program_counter, program_memory_value, memory_address, unshifted_memory_write_value, unshifted_memory_write_sections, memory_read_value, usb_packet_ready, handled_usb_packet);
+    usb usb(clk48, usb_d_p, usb_d_n, usb_pullup, got_usb_packet, usb_packet_buffer_address, usb_packet_buffer_read_value, usb_module_usb_packet_buffer_write_value, write_to_usb_packet_buffer, usb_packet_ready);
 
     initial $readmemh(`MEMORY_FILE, memory);
 
@@ -201,6 +204,12 @@ module top(
         end
         if (usb_packet_buffer_write_sections[3]) begin
             usb_packet_buffer[usb_address][31:24] <= usb_packet_buffer_write_value[31:24];
+        end
+
+        if (got_usb_packet) begin
+            usb_packet_ready <= 1;
+        end else if (handled_usb_packet) begin
+            usb_packet_ready <= 0;
         end
     end
 
