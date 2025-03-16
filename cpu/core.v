@@ -192,7 +192,7 @@ module core(clock, next_program_counter, program_memory_value, memory_address, m
 
     wire [63:0] next_mcycle = mcycle + 1;
 
-    wire [63:0] next_minstret = core.stall || core.trap ? minstret : minstret + 1;;
+    wire [63:0] next_minstret = stall || trap ? minstret : minstret + 1;;
 
     wire [63:0] menvcfg = {
         1'b0 /* STCE */,
