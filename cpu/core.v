@@ -132,14 +132,8 @@ module core(
     output reg handled_usb_packet,
     input mip_mtip // machine timer interrupt pending 
 );
-    wire [31:0] instruction, alu_result, next_instruction_address, base_register_read_value_1, base_register_read_value_2;
-    wire [31:0] i_immediate, s_immediate, b_immediate, u_immediate, j_immediate, csr_immediate;
-    wire [11:0] func12, csr;
-    wire [6:0] opcode;
-    wire [4:0] register_read_address_1, register_read_address_2, rd;
-    wire [2:0] funct3;
+    wire [31:0] alu_result, base_register_read_value_1, base_register_read_value_2;
     wire comparator_result;
-    wire csr_is_read_only;
 
     reg [31:0] program_counter, register_write_value_1, register_write_value_2, register_read_value_1, register_read_value_2, alu_operand_1, alu_operand_2, comparator_operand_1, comparator_operand_2, csr_write_value, csr_read_value;
     initial program_counter = `INITIAL_PROGRAM_COUNTER;
@@ -216,26 +210,27 @@ module core(
     alu alu(alu_opcode, alu_operand_1, alu_operand_2, alu_result);
     comparator comparator(comparator_opcode, comparator_operand_1, comparator_operand_2, comparator_result);
 
-    assign instruction = program_memory_value;
-    assign opcode = instruction[6:0];
+    wire [31:0] instruction = program_memory_value;
+    wire [6:0] opcode = instruction[6:0];
 
-    assign i_immediate = { {21{instruction[31]}}, instruction[30:20] };
-    assign s_immediate = { {21{instruction[31]}}, instruction[30:25], instruction[11:7] };
-    assign b_immediate = { {20{instruction[31]}}, instruction[7], instruction[30:25], instruction[11:8], 1'b0 };
-    assign u_immediate = { instruction[31:12], 12'b0 };
-    assign j_immediate = { {12{instruction[31]}}, instruction[19:12], instruction[20], instruction[30:21], 1'b0 };
-    assign csr_immediate = { 27'b0, instruction[19:15] };
+    wire [31:0] i_immediate = { {21{instruction[31]}}, instruction[30:20] };
+    wire [31:0] s_immediate = { {21{instruction[31]}}, instruction[30:25], instruction[11:7] };
+    wire [31:0] b_immediate = { {20{instruction[31]}}, instruction[7], instruction[30:25], instruction[11:8], 1'b0 };
+    wire [31:0] u_immediate = { instruction[31:12], 12'b0 };
+    wire [31:0] j_immediate = { {12{instruction[31]}}, instruction[19:12], instruction[20], instruction[30:21], 1'b0 };
+    wire [31:0] csr_immediate = { 27'b0, instruction[19:15] };
 
-    assign funct3 = instruction[14:12];
-    assign func12 = instruction[31:20];
+    wire [2:0] funct3 = instruction[14:12];
+    wire [11:0] func12 = instruction[31:20];
 
-    assign register_read_address_1 = instruction[19:15];
-    assign register_read_address_2 = instruction[24:20];
-    assign rd = instruction[11:7];
-    assign csr = instruction[31:20];
-    assign csr_is_read_only = csr[11:10] == 2'b11;
+    wire [4:0] register_read_address_1 = instruction[19:15];
+    wire [4:0] register_read_address_2 = instruction[24:20];
+    wire [4:0] rd = instruction[11:7];
 
-    assign next_instruction_address = program_counter + 4;
+    wire [11:0] csr = instruction[31:20];
+    wire csr_is_read_only = csr[11:10] == 2'b11;
+
+    wire [31:0] next_instruction_address = program_counter + 4;
 
     always @* begin
         comparator_opcode = 3'bx;
