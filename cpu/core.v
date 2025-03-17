@@ -120,20 +120,18 @@ localparam ADDRESS_MINSTRET = 12'hB02;
 localparam ADDRESS_MCYCLEH = 12'hB80;
 localparam ADDRESS_MINSTRETH = 12'hB82;
 
-module core(clock, next_program_counter, program_memory_value, memory_address, memory_write_value, memory_write_sections, memory_read_value, usb_packet_ready, handled_usb_packet, mip_mtip);
-
-    input clock;
-    input [31:0] program_memory_value;
-    input [31:0] memory_read_value;
-    input usb_packet_ready;
-    input mip_mtip; // machine timer interrupt pending
-
-    output reg [31:0] next_program_counter, memory_address, memory_write_value;
-    // MSB 1 means write high half-word, middle bit 1 means write low
-    // half-word high byte, LSB means write low byte
-    output reg [2:0] memory_write_sections;
-    output reg handled_usb_packet;
-
+module core(
+    input clock,
+    output reg [31:0] next_program_counter,
+    input [31:0] program_memory_value,
+    output reg [31:0] memory_address,
+    output reg [31:0] memory_write_value,
+    output reg [2:0] memory_write_sections, // which bytes to write within the memory word
+    input [31:0] memory_read_value,
+    input usb_packet_ready,
+    output reg handled_usb_packet,
+    input mip_mtip // machine timer interrupt pending 
+);
     wire [31:0] instruction, alu_result, next_instruction_address, base_register_read_value_1, base_register_read_value_2;
     wire [31:0] i_immediate, s_immediate, b_immediate, u_immediate, j_immediate, csr_immediate;
     wire [11:0] func12, csr;
