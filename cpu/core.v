@@ -135,83 +135,13 @@ module core(
     wire [31:0] alu_result, base_register_read_value_1, base_register_read_value_2;
     wire comparator_result;
 
-    reg [31:0] program_counter, register_write_value_1, register_write_value_2, register_read_value_1, register_read_value_2, alu_operand_1, alu_operand_2, comparator_operand_1, comparator_operand_2, csr_write_value, csr_read_value;
-    initial program_counter = `INITIAL_PROGRAM_COUNTER;
-    reg [11:0] csr_address;
-    reg [4:0] register_write_address_1, register_write_address_2, load_register, pending_load_register;
-    reg [3:0] alu_opcode;
-    reg [2:0] comparator_opcode, load_funct3, pending_load_funct3;
-    reg csr_write_enable;
-
-    reg trap;
-    reg [31:0] trap_mcause;
-    reg return_from_trap;
-    reg stall = 1;
-
-    // machine interrupt enable
-    reg mstatus_mie = 0;
-    // machine prior interrupt enable
-    reg mstatus_mpie;
-
-    reg [29:0] base;
-
-    // machine interrupt pending
-    // machine external interrupt pending
-    wire mip_meip = usb_packet_ready;
-
-    // machine software interrupt pending
-    reg mip_msip;
-
-    // machine interrupt enable
-    // machine external interrupt enable
-    reg mie_meie;
-    // machine timer interrupt enable
-    reg mie_mtie;
-    // machine software interrupt enable
-    reg mie_msie;
-
-    reg [63:0] mcycle = 0;
-    reg [63:0] minstret = 0;
-
-    reg [31:0] mscratch;
-
-    // machine exception program counter
-    reg [29:0] mepc;
-
-    reg [31:0] mcause = 0;
-
-    reg previous_usb_packet_ready = 0;
-
-    wire [63:0] next_mcycle = mcycle + 1;
-
-    wire [63:0] next_minstret = stall || trap ? minstret : minstret + 1;;
-
-    wire [63:0] menvcfg = {
-        1'b0 /* STCE */,
-        1'b0 /* PBMTE */,
-        1'b0 /* ADUE */,
-        1'b0 /* CDE */,
-        26'b0 /* WPRI */,
-        2'b0 /* PMM */,
-        24'b0 /* WPRI */,
-        1'b0 /* CBZE */,
-        1'b0 /* CBCFE */,
-        2'b0 /* CBIE */,
-        3'b0 /* WPRI */,
-        1'b0 /* FIOM */
-    };
-
-    `ifdef simulation
-        reg finish;
-        reg error;
-    `endif
-
     registers registers(clock, register_write_address_1, register_write_value_1, register_write_address_2, register_write_value_2, register_read_address_1, base_register_read_value_1, register_read_address_2, base_register_read_value_2);
     alu alu(alu_opcode, alu_operand_1, alu_operand_2, alu_result);
     comparator comparator(comparator_opcode, comparator_operand_1, comparator_operand_2, comparator_result);
 
     wire [31:0] instruction = program_memory_value;
     wire [6:0] opcode = instruction[6:0];
+    wire [31:0] next_instruction_address = program_counter + 4;
 
     wire [31:0] i_immediate = { {21{instruction[31]}}, instruction[30:20] };
     wire [31:0] s_immediate = { {21{instruction[31]}}, instruction[30:25], instruction[11:7] };
@@ -230,7 +160,52 @@ module core(
     wire [11:0] csr = instruction[31:20];
     wire csr_is_read_only = csr[11:10] == 2'b11;
 
-    wire [31:0] next_instruction_address = program_counter + 4;
+    wire mip_meip = usb_packet_ready; // machine external interrupt pending
+    wire [63:0] menvcfg = {
+        1'b0 /* STCE */,
+        1'b0 /* PBMTE */,
+        1'b0 /* ADUE */,
+        1'b0 /* CDE */,
+        26'b0 /* WPRI */,
+        2'b0 /* PMM */,
+        24'b0 /* WPRI */,
+        1'b0 /* CBZE */,
+        1'b0 /* CBCFE */,
+        2'b0 /* CBIE */,
+        3'b0 /* WPRI */,
+        1'b0 /* FIOM */
+    };
+
+    wire [63:0] next_mcycle = mcycle + 1;
+    wire [63:0] next_minstret = stall || trap ? minstret : minstret + 1;;
+
+    // wire-like regs set in the following combinational block
+    reg [31:0] register_write_value_1,
+        register_write_value_2,
+        register_read_value_1,
+        register_read_value_2,
+        alu_operand_1,
+        alu_operand_2,
+        comparator_operand_1,
+        comparator_operand_2,
+        csr_write_value;
+    reg [11:0] csr_address;
+    reg [4:0] register_write_address_1,
+        register_write_address_2,
+        pending_load_register;
+    reg [3:0] alu_opcode;
+    reg [2:0] comparator_opcode,
+        pending_load_funct3;
+    reg csr_write_enable;
+
+    reg trap;
+    reg [31:0] trap_mcause;
+    reg return_from_trap;
+
+    `ifdef simulation
+        reg finish;
+        reg error;
+    `endif
 
     always @* begin
         comparator_opcode = 3'bx;
@@ -548,6 +523,28 @@ module core(
         end
     end
 
+    // register-like regs written in the following block
+    reg [31:0] program_counter = `INITIAL_PROGRAM_COUNTER;
+    reg [4:0] load_register;
+    reg [2:0] load_funct3;
+    reg stall = 1;
+
+    reg mstatus_mie = 0; // machine interrupt enable
+    reg mstatus_mpie; // machine prior interrupt enable
+    reg [29:0] base;
+    reg mip_msip; // machine software interrupt pending
+
+    // machine interrupt enable
+    reg mie_meie; // machine external interrupt enable
+    reg mie_mtie; // machine timer interrupt enable
+    reg mie_msie; // machine software interrupt enable
+
+    reg [63:0] mcycle = 0;
+    reg [63:0] minstret = 0;
+    reg [31:0] mscratch;
+    reg [29:0] mepc; // machine exception program counter
+    reg [31:0] mcause = 0;
+
     always @(posedge clock) begin
         program_counter <= next_program_counter;
         stall <= 0;
@@ -617,6 +614,9 @@ module core(
         trap_mcause = _mcause;
         next_program_counter = { base, 2'b0 };
     endtask
+
+    // wire-like regs set in the following combinational block
+    reg [31:0] csr_read_value;
 
     always @* begin
         case (csr_address)
