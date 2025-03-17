@@ -15,62 +15,55 @@ module top(
     inout usb_d_n,
 
     output usb_pullup,
-    output rgb_led0_r,
-    output rgb_led0_g,
-    output rgb_led0_b
+    output rgb_led0_r = ~led_on,
+    output rgb_led0_g = ~led_on,
+    output rgb_led0_b = ~led_on
 );
-
-    // nextpnr reports this as a 12 mhz clock; this is a bug in nextpnr,
-    // I confirmed on hardware that the observed clock is 24 mhz
-    reg clk24 = 0;
-
-    wire [31:0] memory_address, memory_write_value, memory_read_value, unshifted_memory_write_value, unshifted_memory_read_value, usb_packet_buffer_write_value, usb_packet_buffer_read_value, usb_module_usb_packet_buffer_write_value;
-    reg [31:0] program_memory_value, next_program_counter, block_ram_read_value, memory_mapped_register_read_value;
+    // wires for module output
+    wire [31:0] memory_address,
+        unshifted_memory_write_value,
+        usb_packet_buffer_read_value,
+        usb_module_usb_packet_buffer_write_value,
+        next_program_counter;
     wire [2:0] unshifted_memory_write_sections;
     wire [$clog2(USB_PACKET_BUFFER_SIZE/4) - 1:0] usb_packet_buffer_address;
-    reg read_memory_mapped_register, write_to_usb_packet_buffer;
+    wire write_to_usb_packet_buffer;
+    wire handled_usb_packet;
+    wire got_usb_packet;
 
-    reg [63:0] mtime, mtimecmp;
+    core core(clk24, next_program_counter, program_memory_value, memory_address, unshifted_memory_write_value, unshifted_memory_write_sections, memory_read_value, usb_packet_ready, handled_usb_packet, mip_mtip);
+    usb usb(clk48, usb_d_p, usb_d_n, usb_pullup, got_usb_packet, usb_packet_buffer_address, usb_packet_buffer_read_value, usb_module_usb_packet_buffer_write_value, write_to_usb_packet_buffer, usb_packet_ready);
 
-    reg [1:0] pending_read_shift;
+    // continuously assigned wires
+    wire [3:0] usb_packet_buffer_write_sections = addressing_usb_packet_buffer ? memory_write_sections : write_to_usb_packet_buffer ? 4'b1111 : 0;
+    wire [3:0] memory_write_sections = { {2{unshifted_memory_write_sections[2]}}, unshifted_memory_write_sections[1:0] } << memory_address[1:0];
 
-    (* ram_style = "block" *)
-    reg [31:0] memory[MEMORY_SIZE - 1:0];
+    wire [31:0] unshifted_memory_read_value = read_memory_mapped_register ? memory_mapped_register_read_value : block_ram_read_value;
+    // these shifts work due to requiring natural alignment of memory accesses
+    wire [31:0] memory_read_value = unshifted_memory_read_value >> (pending_read_shift * 8);
+    wire [31:0] memory_write_value = unshifted_memory_write_value << (memory_address[1:0] * 8);
+    wire [31:0] usb_packet_buffer_write_value = addressing_usb_packet_buffer ? memory_write_value : usb_module_usb_packet_buffer_write_value;
 
-    reg [31:0] usb_packet_buffer[USB_PACKET_BUFFER_SIZE / 4];
-
-    reg led_on = 0;
-
+    wire addressing_usb_packet_buffer = memory_address >= ADDRESS_USB_PACKET_BUFFER && memory_address < (ADDRESS_USB_PACKET_BUFFER + USB_PACKET_BUFFER_SIZE);
     // needed because of parsing errors that happen only in yosys when I do
     // either of these inline
     wire [31:0] usb_address_base = (memory_address - ADDRESS_USB_PACKET_BUFFER);
     wire [7:0] usb_address = addressing_usb_packet_buffer ? usb_address_base[9:2] : usb_packet_buffer_address;
 
-    reg usb_packet_ready;
-    wire handled_usb_packet;
-    wire got_usb_packet;
-
     wire mip_mtip = mtime >= mtimecmp;
 
-    wire addressing_usb_packet_buffer = memory_address >= ADDRESS_USB_PACKET_BUFFER && memory_address < (ADDRESS_USB_PACKET_BUFFER + USB_PACKET_BUFFER_SIZE);
-
-    core core(clk24, next_program_counter, program_memory_value, memory_address, unshifted_memory_write_value, unshifted_memory_write_sections, memory_read_value, usb_packet_ready, handled_usb_packet, mip_mtip);
-    usb usb(clk48, usb_d_p, usb_d_n, usb_pullup, got_usb_packet, usb_packet_buffer_address, usb_packet_buffer_read_value, usb_module_usb_packet_buffer_write_value, write_to_usb_packet_buffer, usb_packet_ready);
-
+    // stateful regs written in the following block
+    (* ram_style = "block" *)
+    reg [31:0] memory[MEMORY_SIZE - 1:0];
     initial $readmemh(`MEMORY_FILE, memory);
 
-    wire [3:0] usb_packet_buffer_write_sections = addressing_usb_packet_buffer ? memory_write_sections : write_to_usb_packet_buffer ? 4'b1111 : 0;
-    wire [3:0] memory_write_sections = { {2{unshifted_memory_write_sections[2]}}, unshifted_memory_write_sections[1:0] } << memory_address[1:0];
-
-    assign rgb_led0_r = ~led_on;
-    assign rgb_led0_g = ~led_on;
-    assign rgb_led0_b = ~led_on;
-
-    assign unshifted_memory_read_value = read_memory_mapped_register ? memory_mapped_register_read_value : block_ram_read_value;
-    // these shifts work due to requiring natural alignment of memory accesses
-    assign memory_read_value = unshifted_memory_read_value >> (pending_read_shift * 8);
-    assign memory_write_value = unshifted_memory_write_value << (memory_address[1:0] * 8);
-    assign usb_packet_buffer_write_value = addressing_usb_packet_buffer ? memory_write_value : usb_module_usb_packet_buffer_write_value;
+    reg [31:0] program_memory_value,
+        block_ram_read_value,
+        memory_mapped_register_read_value;
+    reg [63:0] mtime, mtimecmp;
+    reg [1:0] pending_read_shift;
+    reg led_on = 0;
+    reg read_memory_mapped_register;
 
     always @(posedge clk24) begin
         program_memory_value <= memory[next_program_counter[13:2]];
@@ -194,6 +187,10 @@ module top(
         end
     end
 
+    // stateful regs written in the following block
+    reg [31:0] usb_packet_buffer[USB_PACKET_BUFFER_SIZE / 4];
+    reg usb_packet_ready;
+
     always @(posedge clk48) begin
         if (usb_packet_buffer_write_sections[0]) begin
             usb_packet_buffer[usb_address][7:0] <= usb_packet_buffer_write_value[7:0];
@@ -214,6 +211,10 @@ module top(
             usb_packet_ready <= 0;
         end
     end
+
+    // nextpnr reports this as a 12 mhz clock; this is a bug in nextpnr,
+    // I confirmed on hardware that the observed clock is 24 mhz
+    reg clk24 = 0;
 
     always @(posedge clk48) begin
         clk24 <= ~clk24;
