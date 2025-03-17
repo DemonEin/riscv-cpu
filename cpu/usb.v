@@ -60,6 +60,7 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, got_usb_packet, packet_buffer_
         next_packet_buffer_address = packet_buffer_address;
         packet_buffer_write_value = read_bits;
         got_usb_packet = 0;
+        next_data_ready_counter = data_ready_counter;
 
         if (data_ready) begin
             next_previous_data = data;
