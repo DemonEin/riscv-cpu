@@ -1,4 +1,5 @@
 led = 0x80000010;
+usb_packet_buffer = 0xc0000000;
 
 MEMORY {
     sram (wx) : ORIGIN = 0, LENGTH = 0x1000

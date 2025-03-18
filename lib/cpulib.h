@@ -19,9 +19,8 @@ typedef unsigned long long uint64_t;
 #define MCAUSE_MACHINE_TIMER_INTERRUPT ((1 << 31) | 7)
 #define MCAUSE_MACHINE_EXTERNAL_INTERRUPT ((1 << 31) | 11)
 
-#define PACKET_BUFFER_ADDRESS 0xc0000000
-
 extern volatile bool led;
+extern volatile char usb_packet_buffer[1024];
 
 void set_timer(uint64_t);
 void sleep_for_clock_cycles(uint32_t);
