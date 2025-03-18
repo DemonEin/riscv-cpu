@@ -112,6 +112,7 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, got_usb_packet, packet_buffer_
                 next_data_ready_counter = data_ready_counter + 1;
                 if (data_ready && se0) begin
                     // end of packet
+                    got_usb_packet = 1;
                     next_state = STATE_READ_COMPLETE;
                     write_to_packet_buffer = 1;
                     packet_buffer_write_value = read_bits >> bits_to_read;
