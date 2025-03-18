@@ -61,6 +61,7 @@ localparam FUNC12_CLEAR_USB_INTERRUPT = 12'b111011000000;
 `ifdef simulation
 localparam FUNC12_TEST_PASS = 12'b100011000000;
 localparam FUNC12_TEST_FAIL = 12'b110011000000;
+localparam FUNC12_SIMULATION_PRINT = 12'b000011000000;
 `endif
 
 // the bit at index 3 is the bit at index 30 in the corresponding instruction
@@ -205,6 +206,7 @@ module core(
     `ifdef simulation
         reg finish;
         reg error;
+        reg simulation_print;
     `endif
 
     always @* begin
@@ -240,6 +242,10 @@ module core(
         handled_usb_packet = 0;
 
         next_program_counter = program_counter;
+
+        `ifdef simulation
+            simulation_print = 0;
+        `endif
 
         if (load_register != 0) begin
             register_write_address_2 = load_register;
@@ -427,6 +433,9 @@ module core(
                                         end
                                         FUNC12_TEST_FAIL: begin
                                             error = 1;
+                                        end
+                                        FUNC12_SIMULATION_PRINT: begin
+                                            simulation_print = 1;
                                         end
                                     `endif
                                     default: begin
@@ -824,6 +833,18 @@ module core(
                 $stop;
             end else begin
                 core_file = 32'bx;
+            end
+        end
+
+        always @(posedge clock) begin
+            if (simulation_print) begin
+                for (reg [31:0] i = registers.r[10]; // start at a0
+                        ((top.memory[i / 4] >> ((i % 4) * 8)) & 32'hFF) != 0;
+                        i = i + 1) begin
+                    // have to duplicate a complex expression but whatever
+                    $write("%u", (top.memory[i / 4] >> ((i % 4) * 8)) & 32'hFF);
+                end
+                $fflush(); // doesn't print immediately otherwise
             end
         end
     `endif

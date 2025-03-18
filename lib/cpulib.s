@@ -33,6 +33,11 @@ pass:
 fail:
     .insn 0xcc000073 # custom instruction to fail test
 
+.global simulation_print
+simulation_print:
+    .insn 0x0c000073 # custom instruction to print string starting at a0
+    ret
+
 .global enable_external_interrupts
 enable_external_interrupts:
     li t0, (1 << 11)
