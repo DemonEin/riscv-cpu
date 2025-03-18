@@ -9,3 +9,9 @@ test: $(target_directory)/verilator/sim usbtestdata
 		| $< \
 		| head -c $$(wc -c < usbtestdata) ) \
 	usbtestdata
+
+# don't perform a diff with the intended output and just run with the input,
+# useful when debugging a failing test
+.PHONY: simpletest
+simpletest: $(target_directory)/verilator/sim usbtestdata
+	cargo run --manifest-path usb-encode/Cargo.toml < usbtestdata | $<
