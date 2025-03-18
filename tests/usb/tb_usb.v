@@ -54,11 +54,7 @@ module tb_usb();
 
         #10ms
 
-        for (reg [31:0] i = 0; i < bytes_read; i = i + 1) begin
-            $write("%u", (top.usb_packet_buffer[i / 4] >> ((i % 4) * 8)) & 0'hFF);
-        end
-
-        $stop;
+        $finish;
     end
 
     always #10.4166667ns begin // half of the 48mhz period

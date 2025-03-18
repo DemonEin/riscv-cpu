@@ -14,6 +14,7 @@ void on_trap() {
             : "=r" (mcause));
     switch (mcause) {
         case MCAUSE_MACHINE_EXTERNAL_INTERRUPT:
+            simulation_print(usb_packet_buffer);
             clear_usb_interrupt();
             break;
         default:

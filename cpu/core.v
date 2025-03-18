@@ -838,11 +838,21 @@ module core(
 
         always @(posedge clock) begin
             if (simulation_print) begin
-                for (reg [31:0] i = registers.r[10]; // start at a0
-                        ((top.memory[i / 4] >> ((i % 4) * 8)) & 32'hFF) != 0;
-                        i = i + 1) begin
-                    // have to duplicate a complex expression but whatever
-                    $write("%u", (top.memory[i / 4] >> ((i % 4) * 8)) & 32'hFF);
+                // duplicating code in these two branches but whatever
+                if (registers.r[10] >= ADDRESS_USB_PACKET_BUFFER && registers.r[10] < ADDRESS_USB_PACKET_BUFFER + USB_PACKET_BUFFER_SIZE) begin
+                    for (reg [31:0] i = registers.r[10]; // start at a0
+                            ((top.usb_packet_buffer[i / 4] >> ((i % 4) * 8)) & 32'hFF) != 0;
+                            i = i + 1) begin
+                        // have to duplicate a complex expression but whatever
+                        $write("%u", (top.usb_packet_buffer[i / 4] >> ((i % 4) * 8)) & 32'hFF);
+                    end
+                end else begin
+                    for (reg [31:0] i = registers.r[10]; // start at a0
+                            ((top.memory[i / 4] >> ((i % 4) * 8)) & 32'hFF) != 0;
+                            i = i + 1) begin
+                        // have to duplicate a complex expression but whatever
+                        $write("%u", (top.memory[i / 4] >> ((i % 4) * 8)) & 32'hFF);
+                    end
                 end
                 $fflush(); // doesn't print immediately otherwise
             end
