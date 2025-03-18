@@ -179,6 +179,76 @@ void blink_morse(const char* message) {
                 morse_short();
                 morse_long();
                 break;
+            case '0':
+                morse_long();
+                morse_long();
+                morse_long();
+                morse_long();
+                morse_long();
+                break;
+            case '1':
+                morse_short();
+                morse_long();
+                morse_long();
+                morse_long();
+                morse_long();
+                break;
+            case '2':
+                morse_short();
+                morse_short();
+                morse_long();
+                morse_long();
+                morse_long();
+                break;
+            case '3':
+                morse_short();
+                morse_short();
+                morse_short();
+                morse_long();
+                morse_long();
+                break;
+            case '4':
+                morse_short();
+                morse_short();
+                morse_short();
+                morse_short();
+                morse_long();
+                break;
+            case '5':
+                morse_short();
+                morse_short();
+                morse_short();
+                morse_short();
+                morse_short();
+                break;
+            case '6':
+                morse_long();
+                morse_short();
+                morse_short();
+                morse_short();
+                morse_short();
+                break;
+            case '7':
+                morse_long();
+                morse_long();
+                morse_short();
+                morse_short();
+                morse_short();
+                break;
+            case '8':
+                morse_long();
+                morse_long();
+                morse_long();
+                morse_short();
+                morse_short();
+                break;
+            case '9':
+                morse_long();
+                morse_long();
+                morse_long();
+                morse_long();
+                morse_short();
+                break;
             case ' ':
                 morse_sleep(5); // two time units will be done at the end of the loop
                 break;
