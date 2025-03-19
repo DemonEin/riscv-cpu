@@ -34,3 +34,4 @@ void clear_usb_interrupt();
 void pass();
 void fail();
 void simulation_print(const char*);
+void simulation_putc(char);

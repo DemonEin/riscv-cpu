@@ -15,6 +15,10 @@ void sleep_ms(uint32_t time) {
     sleep_for_clock_cycles(time * (CLOCK_FREQUENCY / 1000));
 }
 
+void simulation_putc(char c) {
+    simulation_print((char [2]) { c, '\0' });
+}
+
 #define MORSE_TIME_UNIT 200 // in ms
 
 void morse_sleep(uint32_t time_units) {
