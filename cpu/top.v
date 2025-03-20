@@ -17,7 +17,17 @@ module top(
     output usb_pullup,
     output rgb_led0_r = ~led_on,
     output rgb_led0_g = ~led_on,
-    output rgb_led0_b = ~led_on
+    output rgb_led0_b = ~led_on,
+
+    output gpio_0,
+    output gpio_1,
+    output gpio_5,
+    output gpio_6,
+    output gpio_9,
+    output gpio_10,
+    output gpio_11,
+    output gpio_12,
+    output gpio_13
 );
     // wires for module output
     wire [31:0] memory_address,

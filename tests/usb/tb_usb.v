@@ -14,8 +14,25 @@ module tb_usb();
 
     reg clock48;
 
-    wire r, g, b;
-    top top(clock48, data_wire, data_n_wire, usb_pullup, r, g, b);
+    wire r, g, b, null;
+    top top(
+        clock48,
+        data_wire,
+        data_n_wire,
+        usb_pullup,
+        r,
+        g,
+        b,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+    );
 
     initial begin
         reg [31:0] bytes_read = $fread(data_list, STDIN);
