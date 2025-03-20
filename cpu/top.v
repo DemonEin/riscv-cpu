@@ -199,7 +199,7 @@ module top(
 
     // stateful regs written in the following block
     reg [31:0] usb_packet_buffer[USB_PACKET_BUFFER_SIZE / 4];
-    reg usb_packet_ready;
+    reg usb_packet_ready = 0;
 
     always @(posedge clk48) begin
         if (usb_packet_buffer_write_sections[0]) begin
