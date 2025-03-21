@@ -47,27 +47,7 @@ module tb_usb();
         data_n = 0;
         #10ms
 
-        // send sync pattern
-        for (reg [3:0] i = 0; i < 8; i = i + 1) begin
-            data = SYNC_PATTERN[7 - i[2:0]];
-            data_n = ~data;
-            #FULL_SPEED_PERIOD;
-        end
-
-        // send data
-        for (reg [31:0] i = 0; i < bytes_read; i = i + 1) begin
-            for (reg [7:0] j = 0; j < 8; j = j + 1) begin
-                data = data_list[i][j[2:0]];
-                data_n = ~data;
-                #FULL_SPEED_PERIOD;
-            end
-        end
-
-        // send end of packet
-        data = 0;
-        data_n = 0;
-        #FULL_SPEED_PERIOD
-        #FULL_SPEED_PERIOD
+        send_packet(data_list, bytes_read);
 
         #10ms
 
@@ -77,5 +57,55 @@ module tb_usb();
     always #10.4166667ns begin // half of the 48mhz period
         clock48 <= ~clock48;
     end
+
+    reg previous_output;
+    reg [31:0] consecutive_input_ones;
+    reg input_bit;
+    task send_packet(input [7:0] data_list[1024], input [31:0] data_list_size);
+        // send sync pattern
+        for (reg [3:0] i = 0; i < 8; i = i + 1) begin
+            data = SYNC_PATTERN[7 - i[2:0]];
+            data_n = ~data;
+            #FULL_SPEED_PERIOD;
+        end
+
+        // send data
+        previous_output = 0; // since the sync packet ends at low level
+        consecutive_input_ones = 1; // since the sync packet ends with an encoded one
+        for (reg [31:0] i = 0; i < data_list_size; i = i + 1) begin
+            for (reg [7:0] j = 0; j < 8; j = j + 1) begin
+                input_bit = data_list[i][j[2:0]];
+
+                if (input_bit) begin
+                    consecutive_input_ones = input_ones_count + 1;
+                end else begin
+                    consecutive_input_ones = 0;
+                end
+
+                send_bit(!(input_bit ^ previous_output));
+
+                if (consecutive_input_ones == 6) begin
+                    // send bit-stuffed bit
+                    consecutive_input_ones = 0;
+                    send_bit(~previous_output);
+                end else if (consecutive_input_ones > 6) begin
+                    $stop("this should not happen");
+                end
+            end
+        end
+
+        // send end of packet
+        data = 0;
+        data_n = 0;
+        #FULL_SPEED_PERIOD;
+        #FULL_SPEED_PERIOD;
+    endtask
+
+    task send_bit(input value);
+        data = value;
+        data_n = ~data;
+        previous_output = data;
+        #FULL_SPEED_PERIOD;
+    endtask
 
 endmodule
