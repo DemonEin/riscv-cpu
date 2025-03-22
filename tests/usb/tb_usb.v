@@ -77,7 +77,7 @@ module tb_usb();
                 input_bit = data_list[i][j[2:0]];
 
                 if (input_bit) begin
-                    consecutive_input_ones = input_ones_count + 1;
+                    consecutive_input_ones = consecutive_input_ones + 1;
                 end else begin
                     consecutive_input_ones = 0;
                 end
