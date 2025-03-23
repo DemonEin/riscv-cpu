@@ -14,6 +14,9 @@ module tb_usb();
 
     reg clock48;
 
+    reg [6:0] test_device_address = 0;
+    reg [3:0] test_device_endpoint = 0;
+
     wire r, g, b, null;
     top top(
         clock48,
@@ -47,7 +50,11 @@ module tb_usb();
         data_n = 0;
         #10ms
 
-        send_packet(data_list, bytes_read);
+        send_token_packet(4'b1101);
+        #1ms
+        data_list[0] = { 4'b1100, 4'b0011 };
+        data_list[2] = 5;
+        send_packet(data_list, 1);
 
         #10ms
 
@@ -57,6 +64,13 @@ module tb_usb();
     always #10.4166667ns begin // half of the 48mhz period
         clock48 <= ~clock48;
     end
+
+    task send_token_packet(input [3:0] pid);
+        data_list[0] = { ~pid, pid };
+        data_list[1] = { test_device_endpoint[0], test_device_address };
+        data_list[2] = { 5'b0, test_device_endpoint[3:1] }; // leave CRC5 as zero for now
+        send_packet(data_list, 3);
+    endtask
 
     reg previous_output;
     reg [31:0] consecutive_input_ones;

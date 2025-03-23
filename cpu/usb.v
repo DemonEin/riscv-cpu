@@ -1,34 +1,33 @@
-localparam STATE_POWERED = 0;
-localparam STATE_RESET = 1;
-localparam STATE_READING = 2;
-localparam STATE_READ_COMPLETE = 3;
-localparam STATE_DONE = 4;
-localparam STATE_IGNORE_PACKET = 5;
-localparam STATE_SYNCING = 6;
+localparam DECODED_SYNC_PATTERN = 8'b10000000;
+
+localparam TOP_STATE_POWERED = 0;
+localparam TOP_STATE_IDLE = 1;
+localparam TOP_STATE_ACTIVE = 2;
 
 localparam EOP_NEED_SE0_0 = 0;
 localparam EOP_NEED_SE0_1 = 1;
 localparam EOP_NEED_J = 2;
 
-module usb(clock48, usb_d_p, usb_d_n, usb_pullup, got_usb_packet, packet_buffer_address, packet_buffer_read_value, packet_buffer_write_value, write_to_packet_buffer, usb_packet_ready);
-    input clock48;
-    input [31:0] packet_buffer_read_value;
-    input usb_packet_ready;
+module usb(
+    input clock48,
+    inout usb_d_p,
+    inout usb_d_n,
+    output usb_pullup = 1,
+    output reg got_usb_packet, 
+    output reg [$clog2(USB_PACKET_BUFFER_SIZE / 4) - 1:0] packet_buffer_address = 0,
+    input [31:0] packet_buffer_read_value,
+    output reg [31:0] packet_buffer_write_value,
+    output reg write_to_packet_buffer,
+    input usb_packet_ready
+);
+    reg [1:0] top_state = TOP_STATE_POWERED;
 
-    inout usb_d_p, usb_d_n;
-
-    output usb_pullup;
-    assign usb_pullup = 1;
-    output reg [$clog2(USB_PACKET_BUFFER_SIZE / 4) - 1:0] packet_buffer_address = 0;
-    output reg write_to_packet_buffer;
-    output reg [31:0] packet_buffer_write_value;
-    output reg got_usb_packet;
-
-    reg [$clog2(32):0] bits_to_read, next_bits_to_read;
-    reg [$clog2(USB_PACKET_BUFFER_SIZE / 4) - 1:0] next_packet_buffer_address;
-
-    reg [3:0] state = STATE_POWERED, next_state;
-    reg [2:0] eop_state;
+    // decoding and sending interface
+    reg write_enable;
+    wire [63:0] read_bits = { nzri_decoded_data, read_write_buffer[63:1] };
+    reg [63:0] read_write_buffer; // needs to be 64 bits to fit all data from a setup 
+                                  // transaction
+    reg [6:0] read_write_bits_count;
 
     wire differential_1 = usb_d_p && !usb_d_n;
     wire differential_0 = !usb_d_p && usb_d_n;
@@ -36,127 +35,239 @@ module usb(clock48, usb_d_p, usb_d_n, usb_pullup, got_usb_packet, packet_buffer_
     wire data_j = differential_1;
     wire data_k = differential_0;
     wire idle = usb_d_p && !usb_d_n; // equivalent to differential_1 and data_j
-    // this is the undecoded bit sent over the wire
-    wire data = data_j;
+    wire data = data_j; // this is the undecoded bit sent over the wire
+    wire nzri_decoded_data = !(data ^ previous_data); // nzri decoded, but not bit-stuffing decoded
+    reg previous_data;
 
-    reg [1:0] data_ready_counter = 0, next_data_ready_counter;
-    wire data_ready = data_ready_counter == 3;
-    reg previous_data, next_previous_data;
-
-    wire read_complete = bits_to_read == 0;
+    reg [1:0] read_write_clock_counter;
     reg [2:0] consecutive_nzri_data_ones = 0;
     wire skip_bit = consecutive_nzri_data_ones >= 6;
-    wire nzri_decoded_data = !(data ^ previous_data); // nzri decoded, but not bit-stuffing decoded
-    wire decoded_data = nzri_decoded_data; // only defined when !skip_bit
-    // bits are sent least-significant bit first
-    reg [31:0] read_bits; // these are the last 32 decoded bits
-
-    // needs to hold one reset time, TODO could be smaller
-    reg [31:0] reset_counter = 0;
-
-    always @* begin
-        next_state = state;
-        write_to_packet_buffer = 0;
-        next_packet_buffer_address = packet_buffer_address;
-        packet_buffer_write_value = read_bits;
-        got_usb_packet = 0;
-        next_data_ready_counter = data_ready_counter;
-
-        if (data_ready) begin
-            next_previous_data = data;
-        end else begin
-            next_previous_data = previous_data;
-        end
-
-        if (data_ready && !skip_bit) begin
-            next_previous_data = data;
-            next_bits_to_read = bits_to_read - 1;
-        end else begin
-            next_bits_to_read = bits_to_read;
-        end
-
-        case (state)
-            STATE_POWERED: begin
-                // TODO actually only needs to be 2.5 microseconds
-                if (reset_counter > 48000 * 9) begin
-                    next_state = STATE_RESET;
-                end
-            end
-            STATE_RESET: begin
-                if (data_k) begin
-                    next_state = STATE_SYNCING;
-                    next_previous_data = 1;
-                    next_bits_to_read = 8;
-                    next_data_ready_counter = 2;
-                end
-            end
-            STATE_SYNCING: begin
-                next_data_ready_counter = data_ready_counter + 1;
-                if (read_complete) begin
-                    if (read_bits[31:24] == 8'b10000000) begin
-                        if (!usb_packet_ready) begin
-                            next_state = STATE_READING;
-                            next_bits_to_read = 32;
-                            next_packet_buffer_address = 0;
-                        end else begin
-                            next_state = STATE_IGNORE_PACKET;
-                        end
-                    end else begin
-                        `ifdef simulation
-                            $stop;
-                        `endif
-                    end
-                end
-            end
-            STATE_READING: begin
-                next_data_ready_counter = data_ready_counter + 1;
-                if (data_ready && se0) begin
-                    // end of packet
-                    got_usb_packet = 1;
-                    next_state = STATE_READ_COMPLETE;
-                    write_to_packet_buffer = 1;
-                    packet_buffer_write_value = read_bits >> bits_to_read;
-                end else if (read_complete) begin
-                    write_to_packet_buffer = 1;
-
-                    if (packet_buffer_address == 8'hFF) begin
-                        got_usb_packet = 1;
-                        next_state = STATE_READ_COMPLETE;
-                    end
-                    next_packet_buffer_address = packet_buffer_address + 1;
-                    next_bits_to_read = 32;
-                end
-            end
-            STATE_READ_COMPLETE: begin
-            end
-            STATE_IGNORE_PACKET: begin
-            end
-        endcase
-    end
+    wire set_data_wires = read_write_bits_count > 0 && write_enable && !skip_bit;
+    assign usb_d_p = set_data_wires ? !(read_write_buffer[0] ^ previous_data) : 1'bz;
+    assign usb_d_n = set_data_wires ? !usb_d_p : 1'bz;
+    reg [31:0] reset_counter = 0; // needs to hold one reset time, TODO could be smaller
 
     always @(posedge clock48) begin
+        read_write_clock_counter <= read_write_clock_counter + 1;
+
+        case (top_state)
+            TOP_STATE_POWERED: begin
+                // TODO actually only needs to be 2.5 microseconds
+                if (reset_counter > 48000 * 9) begin
+                    top_state <= TOP_STATE_IDLE;
+                end
+            end
+            TOP_STATE_IDLE: begin
+                if (data_k) begin
+                    top_state <= TOP_STATE_ACTIVE;
+                    packet_state <= PACKET_STATE_SYNCING;
+                    read_write_bits_count <= 8;
+                    previous_data <= 1;
+                    consecutive_nzri_data_ones <= 0;
+                    read_write_clock_counter <= 3;
+                end
+            end
+            TOP_STATE_ACTIVE: begin
+                if (read_write_clock_counter == 3) begin
+                    if (!skip_bit) begin
+                        read_write_buffer <= read_bits;
+                        if (read_write_bits_count > 0) begin
+                            read_write_bits_count <= read_write_bits_count - 1;
+                        end
+
+                        if (read_write_bits_count == 1) begin
+                            write_enable <= 0;
+                        end
+                    end
+
+                    if (read_write_bits_count == 0 || (!skip_bit && read_write_bits_count == 1)) begin 
+                        read_write_complete();
+                    end
+
+                    if (nzri_decoded_data == 1) begin
+                        consecutive_nzri_data_ones <= consecutive_nzri_data_ones + 1;
+                    end else begin
+                        consecutive_nzri_data_ones <= 0;
+                    end
+
+                    previous_data <= data;
+                end
+            end
+        endcase
+
         if (se0) begin
             reset_counter <= reset_counter + 1;
         end else begin
             reset_counter <= 0;
         end
-
-        if (data_ready) begin
-            if (!skip_bit) begin
-                read_bits <= { decoded_data, read_bits[31: 1] };
-            end
-
-            if (nzri_decoded_data == 1) begin
-                consecutive_nzri_data_ones <= consecutive_nzri_data_ones + 1;
-            end else begin
-                consecutive_nzri_data_ones <= 0;
-            end
-        end
-
-        state <= next_state;
-        data_ready_counter <= next_data_ready_counter;
-        packet_buffer_address <= next_packet_buffer_address;
-        bits_to_read <= next_bits_to_read;
-        previous_data <= next_previous_data;
     end
+
+    localparam PACKET_STATE_POWERED = 0;
+    localparam PACKET_STATE_READING = 2;
+    localparam PACKET_STATE_READ_COMPLETE = 3;
+    localparam PACKET_STATE_DONE = 4;
+    localparam PACKET_STATE_AWAIT_END_OF_PACKET = 5;
+    localparam PACKET_STATE_SYNCING = 6;
+    localparam PACKET_STATE_WRITE = 7;
+    localparam PACKET_STATE_READING_PID = 8;
+    localparam PACKET_STATE_READING_TOKEN = 9;
+    localparam PACKET_STATE_READING_DATA = 10;
+    localparam PACKET_STATE_FINISH = 11;
+
+    localparam TRANSACTION_NONE = 0;
+    localparam TRANSACTION_SETUP = 1;
+    localparam TRANSACTION_IN = 2;
+    localparam TRANSACTION_OUT = 3;
+
+    localparam PENDING_SEND_NONE = 0;
+    localparam PENDING_SEND_ACK = 1;
+    localparam PENDING_SEND_NAK = 2;
+
+    localparam TRANSACTION_STATE_IDLE = 0;
+    localparam TRANSACTION_STATE_AWAIT_DATA = 1;
+
+    localparam BREQUEST_GET_STATUS = 0;
+    localparam BREQUEST_CLEAR_FEATURE = 1;
+    localparam BREQUEST_SET_FEATURE = 3;
+    localparam BREQUEST_SET_ADDRESS = 5;
+    localparam BREQUEST_GET_DESCRIPTOR = 6;
+    localparam BREQUEST_SET_DESCRIPTOR = 7;
+    localparam BREQUEST_GET_CONFIGURATION = 8;
+    localparam BREQUEST_SET_CONFIGURATION = 9;
+    localparam BREQUEST_GET_INTERFACE = 10;
+    localparam BREQUEST_SET_INTERFACE = 11;
+    localparam BREQUEST_SYNCH_FRAME = 12;
+
+    localparam PID_OUT = 4'b0001;
+    localparam PID_IN = 4'b1001;
+    localparam PID_SETUP = 4'b1101;
+    localparam PID_DATA0 = 4'b0011;
+    localparam PID_DATA1 = 4'b1011;
+    localparam PID_ACK = 4'b0010;
+    localparam PID_NAK = 4'b1010;
+    localparam PID_STALL = 4'b1110;
+    localparam PID_NYET = 4'b0110;
+
+    reg [3:0] current_transaction = TRANSACTION_NONE;
+    reg [3:0] pending_send = PENDING_SEND_NONE;
+    reg [3:0] packet_state = PACKET_STATE_POWERED;
+    reg [3:0] transaction_state = TRANSACTION_STATE_IDLE;
+    reg [6:0] device_address = 0;
+
+    task read_write_complete();
+        case (packet_state)
+            PACKET_STATE_SYNCING: begin
+                if (read_bits[63:56] == 8'b10000000) begin
+                    packet_state <= PACKET_STATE_READING_PID;
+                    read_write_bits_count <= 8;
+                end else begin
+                    `ifdef simulation
+                        $stop;
+                    `else
+                        packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET;
+                    `endif
+                end
+            end
+            PACKET_STATE_READING_PID: begin
+                if (read_bits[59:56] == ~read_bits[63:60]) begin // check PID check
+                    case (transaction_state)
+                        TRANSACTION_STATE_AWAIT_DATA: begin
+                            if (read_bits[59:56] == PID_DATA0) begin
+                                packet_state <= PACKET_STATE_READING_DATA;
+                                read_write_bits_count <= 64;
+                            end else begin
+                                $stop;
+                                packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET;
+                            end
+                        end
+                        TRANSACTION_STATE_IDLE: begin
+                            case (read_bits[59:56])
+                                PID_SETUP: begin
+                                    read_write_bits_count <= 16;
+                                    current_transaction <= TRANSACTION_SETUP;
+                                    packet_state <= PACKET_STATE_READING_TOKEN;
+                                    transaction_state <= TRANSACTION_STATE_AWAIT_DATA;
+                                end
+                                default: begin
+                                    packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET;
+                                end
+                            endcase
+                        end
+                    endcase
+                end else begin
+                    `ifdef simulation
+                        $stop;
+                    `else
+                        packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET;
+                    `endif
+                end
+            end
+            PACKET_STATE_READING_TOKEN: begin
+                if (read_bits[54:48] == device_address && read_bits[58:55] == 0) begin
+                    transaction_state <= TRANSACTION_STATE_AWAIT_DATA;
+                    packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET; // TODO ignore if not receiving EOP immediately?
+                end else begin
+                    $stop();
+                    current_transaction <= TRANSACTION_NONE;
+                    packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET;
+                end
+            end
+            PACKET_STATE_READING_DATA: begin
+                if (current_transaction == TRANSACTION_SETUP) begin
+                    case (read_bits[15:8]) // bRequest value
+                        BREQUEST_CLEAR_FEATURE: begin
+                        end
+                        BREQUEST_GET_CONFIGURATION: begin
+                        end
+                        BREQUEST_GET_DESCRIPTOR: begin
+                        end
+                        BREQUEST_GET_INTERFACE: begin
+                        end
+                        BREQUEST_GET_STATUS: begin
+                        end
+                        BREQUEST_SET_ADDRESS: begin
+                            device_address <= read_bits[22:16];
+                        end
+                        BREQUEST_SET_CONFIGURATION: begin
+                        end
+                        BREQUEST_SET_DESCRIPTOR: begin
+                        end
+                        BREQUEST_SET_FEATURE: begin
+                        end
+                        BREQUEST_SET_INTERFACE: begin
+                        end
+                        BREQUEST_SYNCH_FRAME: begin
+                        end
+                    endcase
+                end else begin
+                    $stop;
+                end
+            end
+            PACKET_STATE_AWAIT_END_OF_PACKET: begin
+                // TODO implement timeout?
+                if (se0) begin
+                    // end of packet
+                    case (pending_send)
+                        PENDING_SEND_ACK: begin
+                            packet_state <= PACKET_STATE_WRITE;
+                            read_write_bits_count <= 8; // to pause
+                            read_write_buffer[23:8] <= { 4'b0, PID_ACK, DECODED_SYNC_PATTERN };
+                        end
+                        default: begin
+                            read_write_bits_count <= 8; // to pause
+                            packet_state <= PACKET_STATE_FINISH;
+                        end
+                    endcase
+                end
+            end
+            PACKET_STATE_FINISH: begin // to implement a pause after receiving eop
+                top_state <= TOP_STATE_IDLE;
+            end
+            PACKET_STATE_WRITE: begin
+                read_write_bits_count <= 8; // hardcode value could be changed later
+                write_enable <= 1;
+                top_state <= TOP_STATE_IDLE;
+            end
+        endcase
+    endtask
 endmodule
