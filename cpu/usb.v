@@ -42,9 +42,27 @@ module usb(
     reg [1:0] read_write_clock_counter;
     reg [2:0] consecutive_nzri_data_ones = 0;
     wire skip_bit = consecutive_nzri_data_ones >= 6;
-    wire set_data_wires = read_write_bits_count > 0 && write_enable && !skip_bit;
-    assign usb_d_p = set_data_wires ? !(read_write_buffer[0] ^ previous_data) : 1'bz;
-    assign usb_d_n = set_data_wires ? !usb_d_p : 1'bz;
+    assign usb_d_p = write_enable ? output_data : 1'bz;
+    assign usb_d_n = write_enable ? output_data_n : 1'bz;
+    reg output_data, output_data_n;
+    reg send_eop = 0;
+
+    always @* begin
+        if (send_eop) begin
+            output_data = 0;
+            output_data_n = 0;
+        end else begin
+            if (!skip_bit) begin
+                output_data = !(read_write_buffer[0] ^ previous_data);
+            end else begin
+                // insert bit-stuffed transition
+                output_data = !previous_data;
+            end
+
+            output_data_n = !output_data;
+        end
+    end
+
     reg [31:0] reset_counter = 0; // needs to hold one reset time, TODO could be smaller
 
     always @(posedge clock48) begin
@@ -80,6 +98,7 @@ module usb(
                         end
                     end
 
+                    stall_counter <= stall_counter - 1;
                     if (read_write_bits_count == 0 || (!skip_bit && read_write_bits_count == 1)) begin 
                         read_write_complete();
                     end
@@ -113,6 +132,9 @@ module usb(
     localparam PACKET_STATE_READING_TOKEN = 9;
     localparam PACKET_STATE_READING_DATA = 10;
     localparam PACKET_STATE_FINISH = 11;
+    localparam PACKET_STATE_WRITE_PAUSE = 12;
+    localparam PACKET_STATE_WRITE_COMPLETE = 13;
+    localparam PACKET_STATE_SEND_EOP = 14;
 
     localparam TRANSACTION_NONE = 0;
     localparam TRANSACTION_SETUP = 1;
@@ -153,8 +175,11 @@ module usb(
     reg [3:0] packet_state = PACKET_STATE_POWERED;
     reg [3:0] transaction_state = TRANSACTION_STATE_IDLE;
     reg [6:0] device_address = 0;
+    reg [3:0] stall_counter;
 
     task read_write_complete();
+        send_eop <= 0;
+
         case (packet_state)
             PACKET_STATE_SYNCING: begin
                 if (read_bits[63:56] == 8'b10000000) begin
@@ -189,10 +214,17 @@ module usb(
                                     transaction_state <= TRANSACTION_STATE_AWAIT_DATA;
                                 end
                                 default: begin
+                                    `ifdef simulation
+                                        $stop;
+                                    `endif
                                     packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET;
                                 end
                             endcase
                         end
+                        default:
+                            `ifdef simulation
+                                $stop;
+                            `endif
                     endcase
                 end else begin
                     `ifdef simulation
@@ -239,6 +271,9 @@ module usb(
                         BREQUEST_SYNCH_FRAME: begin
                         end
                     endcase
+
+                    packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET;
+                    pending_send <= PENDING_SEND_ACK;
                 end else begin
                     $stop;
                 end
@@ -247,25 +282,41 @@ module usb(
                 // TODO implement timeout?
                 if (se0) begin
                     // end of packet
+                    packet_state <= PACKET_STATE_FINISH;
+                end
+            end
+            PACKET_STATE_FINISH: begin // to implement a pause after receiving eop
+                if (pending_send != PENDING_SEND_NONE) begin
+                    stall_counter <= 4; // could be shorter while still complying with spec
+                    packet_state <= PACKET_STATE_WRITE_PAUSE;
+                end else begin
+                    top_state <= TOP_STATE_IDLE;
+                end
+            end
+            PACKET_STATE_WRITE_PAUSE: begin
+                if (stall_counter == 0) begin
                     case (pending_send)
                         PENDING_SEND_ACK: begin
+                            consecutive_nzri_data_ones <= 0; // not sure if this is needed
                             packet_state <= PACKET_STATE_WRITE;
-                            read_write_bits_count <= 8; // to pause
-                            read_write_buffer[23:8] <= { 4'b0, PID_ACK, DECODED_SYNC_PATTERN };
+                            write_enable <= 1;
+                            read_write_bits_count <= 16; // hardcode value could be changed later
+                            read_write_buffer[15:0] <= { 4'b0, PID_ACK, DECODED_SYNC_PATTERN };
                         end
                         default: begin
-                            read_write_bits_count <= 8; // to pause
-                            packet_state <= PACKET_STATE_FINISH;
+                            $stop;
                         end
                     endcase
                 end
             end
-            PACKET_STATE_FINISH: begin // to implement a pause after receiving eop
-                top_state <= TOP_STATE_IDLE;
-            end
             PACKET_STATE_WRITE: begin
-                read_write_bits_count <= 8; // hardcode value could be changed later
                 write_enable <= 1;
+                send_eop <= 1;
+                packet_state <= PACKET_STATE_SEND_EOP;
+            end
+            PACKET_STATE_SEND_EOP: begin
+                write_enable <= 1;
+                send_eop <= 1;
                 top_state <= TOP_STATE_IDLE;
             end
         endcase
