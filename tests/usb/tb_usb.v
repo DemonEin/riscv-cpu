@@ -54,12 +54,11 @@ module tb_usb();
         // idle
         #10ms
 
-        send_token_packet(4'b1101);
+        send_token_packet(PID_SETUP);
         #FULL_SPEED_PERIOD;
         #FULL_SPEED_PERIOD;
-        data_list[0] = { 4'b1100, 4'b0011 };
-        data_list[2] = 5;
-        send_packet(data_list, 9);
+        data_list[1] = 5;
+        send_data_packet(PID_DATA0, 8);
 
         receive_packet();
         if (received_bit_count != 8) begin
@@ -80,13 +79,26 @@ module tb_usb();
         data_list[0] = { ~pid, pid };
         data_list[1] = { test_device_endpoint[0], test_device_address };
         data_list[2] = { 5'b0, test_device_endpoint[3:1] }; // leave CRC5 as zero for now
-        send_packet(data_list, 3);
+        send_packet(3);
+    endtask
+
+    task send_data_packet(input [3:0] pid, input [31:0] byte_count);
+        for (reg [31:0] i = byte_count; i >= 1; i = i - 1) begin
+            data_list[i] = data_list[i - 1];
+        end
+        data_list[0] = { ~pid, pid };
+        send_packet(byte_count + 1);
+    endtask
+
+    task send_handshake_packet(input [3:0] pid);
+        data_list[0] = { ~pid, pid };
+        send_packet(1);
     endtask
 
     reg previous_data;
     reg [31:0] consecutive_decoded_ones;
     reg input_bit;
-    task send_packet(input [7:0] data_list[1024], input [31:0] data_list_size);
+    task send_packet(input [31:0] byte_count);
         write_enable = 1;
         // send sync pattern
         for (reg [3:0] i = 0; i < 8; i = i + 1) begin
@@ -98,7 +110,7 @@ module tb_usb();
         // send output_data
         previous_data = 0; // since the sync packet ends at low level
         consecutive_decoded_ones = 1; // since the sync packet ends with an encoded one
-        for (reg [31:0] i = 0; i < data_list_size; i = i + 1) begin
+        for (reg [31:0] i = 0; i < byte_count; i = i + 1) begin
             for (reg [7:0] j = 0; j < 8; j = j + 1) begin
                 input_bit = data_list[i][j[2:0]];
 
