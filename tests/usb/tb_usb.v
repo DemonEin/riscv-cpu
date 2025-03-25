@@ -1,3 +1,5 @@
+`include "usb_constants.v"
+
 localparam FULL_SPEED_PERIOD = 83.3333333ns; // the period of usb full-speed transimssion (12 mhz
 localparam SYNC_PATTERN = 8'b01010100;
 localparam STDIN = 32'h8000_0000;

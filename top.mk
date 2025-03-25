@@ -8,7 +8,7 @@ gcc_binary_prefix = ~/riscv-gcc/bin/riscv32-elf-
 current_directory := $(dir $(lastword $(MAKEFILE_LIST)))
 
 # the top files must be included before their dependencies for yosys
-needed_verilog_files := $(foreach file, top.v core.v comparator.v alu.v registers.v usb.v, $(current_directory)cpu/$(file))
+needed_verilog_files := $(foreach file, top.v core.v comparator.v alu.v registers.v usb_constants.v usb.v, $(current_directory)cpu/$(file))
 
 VERILATOR_OPTIONS := +1364-2005ext+v -Wwarn-BLKSEQ -y $(current_directory)cpu
 GCC_OPTIONS := -march=rv32i_zicsr -mabi=ilp32

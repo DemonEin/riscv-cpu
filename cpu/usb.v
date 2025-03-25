@@ -1,3 +1,5 @@
+`include "usb_constants.v"
+
 localparam DECODED_SYNC_PATTERN = 8'b10000000;
 
 localparam TOP_STATE_POWERED = 0;
