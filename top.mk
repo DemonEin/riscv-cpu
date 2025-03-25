@@ -10,7 +10,7 @@ current_directory := $(dir $(lastword $(MAKEFILE_LIST)))
 # the top files must be included before their dependencies for yosys
 needed_verilog_files := $(foreach file, top.v core.v comparator.v alu.v registers.v usb.v, $(current_directory)cpu/$(file))
 
-VERILATOR_OPTIONS := +1364-2005ext+v -Wwarn-BLKSEQ
+VERILATOR_OPTIONS := +1364-2005ext+v -Wwarn-BLKSEQ -y $(current_directory)cpu
 GCC_OPTIONS := -march=rv32i_zicsr -mabi=ilp32
 
 testbench ?= $(current_directory)/tb_top.v
@@ -23,7 +23,7 @@ cpulib.o := $(current_directory)target/lib/cpulib.o
 .NOTINTERMEDIATE:
 
 %/verilator/sim: $(testbench) %/memory.hex %/entry.txt $(needed_verilog_files)
-	verilator $(VERILATOR_OPTIONS) +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) +define+MEMORY_FILE=\"$*/memory.hex\" --binary -j 0 $(testbench) $(needed_verilog_files) -Mdir $(@D) -o $(@F)
+	verilator $(VERILATOR_OPTIONS) +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) +define+MEMORY_FILE=\"$*/memory.hex\" --binary -j 0 $(testbench) -Mdir $(@D) -o $(@F)
 
 %/a.out: $(program_files) $(cpulib.o) $(linker_script) | %
 	$(gcc_binary_prefix)gcc $(GCC_OPTIONS) -I $(current_directory) -T $(linker_script) -nostdlib -o $@ $(program_files) $(cpulib.o)
@@ -47,7 +47,7 @@ $(current_directory)target/lib:
 %/cpu.json: $(needed_verilog_files) %/memory.hex %/entry.txt
 	@# run verilator --lint-only before building because yosys does not report many simple errors
 	INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) && \
-	verilator  --lint-only $(VERILATOR_OPTIONS) +define+INITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER +define+MEMORY_FILE='"$*/memory.hex"' $(needed_verilog_files) && \
+	verilator  --lint-only $(VERILATOR_OPTIONS) +define+INITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER +define+MEMORY_FILE='"$*/memory.hex"' top.v && \
 	yosys -p "read_verilog -DYOSYS -DINITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER -DMEMORY_FILE=\"$*/memory.hex\" $(needed_verilog_files); synth_ecp5 -json $@"
 
 %.config: %.json $(current_directory)cpu/orangecrab.lpf
