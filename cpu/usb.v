@@ -101,9 +101,6 @@ module usb(
                     end
 
                     stall_counter <= stall_counter - 1;
-                    if (read_write_bits_count == 0 || (!skip_bit && read_write_bits_count == 1)) begin 
-                        read_write_complete();
-                    end
 
                     if (nzri_decoded_data == 1) begin
                         consecutive_nzri_data_ones <= consecutive_nzri_data_ones + 1;
@@ -112,6 +109,12 @@ module usb(
                     end
 
                     previous_data <= data;
+
+                    // this is at the end of the block so it can override
+                    // other values
+                    if (read_write_bits_count == 0 || (!skip_bit && read_write_bits_count == 1)) begin 
+                        read_write_complete();
+                    end
                 end
             end
         endcase
@@ -299,11 +302,8 @@ module usb(
                 if (stall_counter == 0) begin
                     case (pending_send)
                         PENDING_SEND_ACK: begin
-                            consecutive_nzri_data_ones <= 0; // not sure if this is needed
                             packet_state <= PACKET_STATE_WRITE;
-                            write_enable <= 1;
-                            read_write_bits_count <= 16; // hardcode value could be changed later
-                            read_write_buffer[15:0] <= { 4'b0, PID_ACK, DECODED_SYNC_PATTERN };
+                            write({  48'bx, 4'b0, PID_ACK }, 8);
                         end
                         default: begin
                             $stop;
@@ -323,4 +323,12 @@ module usb(
             end
         endcase
     endtask
+
+    task write(input [55:0] data, input [6:0] bit_count);
+        consecutive_nzri_data_ones <= 0;
+        write_enable <= 1;
+        read_write_bits_count <= bit_count + 8;
+        read_write_buffer <= { data, DECODED_SYNC_PATTERN };
+    endtask
+
 endmodule
