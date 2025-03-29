@@ -140,13 +140,15 @@ module tb_usb();
     endtask
 
     task assert_receive_data(input [3:0] pid);
+        $display("waiting to receive data packet");
         receive_packet();
         if (!(received_bit_count >= 8 && data_list[0] == { ~pid, pid })) begin
             $stop("did not receive data");
         end
     endtask
-    // TODO add timeout?
+
     task assert_receive_ack();
+        $display("waiting to receive ack packet");
         receive_packet();
         if (!(received_bit_count == 8 && data_list[0] != { ~PID_ACK, PID_ACK })) begin
             $stop("did not receive ack");
@@ -230,8 +232,13 @@ module tb_usb();
     task receive_packet();
         // receive sync pattern
         // assume starting in idle or eop state
+        receive_timeout = 477707; // 10 milliseconds of FULL_SPEED_PERIOD
         while (data_wire != 0 || data_n_wire != 1) begin
             #FULL_SPEED_PERIOD;
+            receive_timeout = receive_timeout - 1;
+            if (receive_timeout == 0) begin
+                $stop("timeout when waiting to receive packet");
+            end
         end
 
         // get sync
