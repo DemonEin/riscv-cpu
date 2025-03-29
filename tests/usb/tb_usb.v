@@ -54,17 +54,7 @@ module tb_usb();
         // idle
         #10ms
 
-        send_token_packet(PID_SETUP);
-        #FULL_SPEED_PERIOD;
-        #FULL_SPEED_PERIOD;
-        data_list[1] = 5;
-        send_data_packet(PID_DATA0, 8);
-
-        receive_packet();
-        if (received_bit_count != 8) begin
-            $display("received_bit_count: %d", received_bit_count);
-            $stop;
-        end
+        set_device_address(1);
 
         #10ms
 
@@ -74,6 +64,94 @@ module tb_usb();
     always #10.4166667ns begin // half of the 48mhz period
         clock48 <= ~clock48;
     end
+
+    task set_device_address(input [6:0] address);
+        do_control_transfer(0, BREQUEST_SET_ADDRESS, { 9'b0, address }, 0, 0, data_list);
+        test_device_address = address;
+    endtask
+
+    task do_control_transfer(
+        input [7:0] bmRequestType,
+        input [7:0] bRequest,
+        input [15:0] wValue,
+        input [15:0] wIndex,
+        input [15:0] wLength,
+        input [7:0] data_data[1024]
+    );
+        do_setup_transaction(
+            bmRequestType,
+            bRequest,
+            wValue,
+            wIndex,
+            wLength
+        );
+
+        if (bmRequestType[7] == 1) begin
+            // control read transfer
+            do_bulk_in_transaction();
+
+            // status stage
+            do_bulk_out_transaction(data_list, 0, PID_DATA1);
+        end else begin
+            // control write transfer
+            if (wLength > 0) begin
+                do_bulk_out_transaction(data_data, { 16'b0, wLength }, PID_DATA0);  // TODO toggle DATA0/DATA1
+            end
+
+            // status stage
+            do_bulk_in_transaction();
+            if (received_bit_count > 8) begin // received_bit_count includes the pid
+                $stop("received data packet non-zero size");
+            end
+        end
+    endtask
+
+    task do_bulk_out_transaction(input [7:0] transaction_data[1024], input [31:0] byte_count, input [3:0] data_pid);
+        send_token_packet(PID_OUT);
+        data_list = transaction_data;
+        send_data_packet(data_pid, byte_count);
+        assert_receive_ack();
+    endtask
+
+    task do_bulk_in_transaction();
+        send_token_packet(PID_IN);
+        assert_receive_data(PID_DATA0); // TODO toggle DATA0/DATA1
+        send_token_packet(PID_ACK);
+    endtask
+
+    task do_setup_transaction(
+        input [7:0] bmRequestType,
+        input [7:0] bRequest,
+        input [15:0] wValue,
+        input [15:0] wIndex,
+        input [15:0] wLength
+    );
+        send_token_packet(PID_SETUP);
+        data_list[0] = bmRequestType;
+        data_list[1] = bRequest;
+        data_list[2] = wValue[7:0];
+        data_list[3] = wValue[15:8];
+        data_list[4] = wIndex[7:0];
+        data_list[5] = wIndex[15:8];
+        data_list[6] = wLength[7:0];
+        data_list[7] = wLength[15:8];
+        send_data_packet(PID_DATA0, 8);
+        assert_receive_ack();
+    endtask
+
+    task assert_receive_data(input [3:0] pid);
+        receive_packet();
+        if (!(received_bit_count >= 8 && data_list[0] == { ~pid, pid })) begin
+            $stop("did not receive data");
+        end
+    endtask
+    // TODO add timeout?
+    task assert_receive_ack();
+        receive_packet();
+        if (!(received_bit_count == 8 && data_list[0] != { ~PID_ACK, PID_ACK })) begin
+            $stop("did not receive ack");
+        end
+    endtask
 
     task send_token_packet(input [3:0] pid);
         data_list[0] = { ~pid, pid };
@@ -138,6 +216,12 @@ module tb_usb();
         #FULL_SPEED_PERIOD;
         #FULL_SPEED_PERIOD;
         write_enable = 0;
+
+        // the spec requires at least a two bit-time delay between packets,
+        // do it here so upon exit from this task it is valid to send another
+        // packet
+        #FULL_SPEED_PERIOD;
+        #FULL_SPEED_PERIOD;
     endtask
 
     reg [31:0] received_bit_count;
