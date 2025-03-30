@@ -278,6 +278,12 @@ module tb_usb();
         if (receive_timeout == 0) begin
             $stop;
         end
+
+        #FULL_SPEED_PERIOD; // wait once for the second end of packet bit time
+
+        // wait twice for the standard inter-packet delay
+        #FULL_SPEED_PERIOD;
+        #FULL_SPEED_PERIOD;
     endtask
 
     task send_bit(input value);
