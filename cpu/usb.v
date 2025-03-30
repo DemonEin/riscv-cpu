@@ -276,6 +276,7 @@ module usb(
                     got_usb_packet <= 1;
                     pending_send <= PENDING_SEND_ACK;
                     packet_state <= PACKET_STATE_FINISH;
+                    transaction_state <= TRANSACTION_STATE_IDLE;
                 end else if (read_complete) begin
                     // TODO check if packet buffer address are correct
                     packet_buffer_write_value <= read_bits;
