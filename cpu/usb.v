@@ -25,11 +25,10 @@ module usb(
     reg [1:0] top_state = TOP_STATE_POWERED;
 
     // decoding and sending interface
-    reg write_enable;
-    wire [63:0] read_bits = { nzri_decoded_data, read_write_buffer[63:1] };
-    reg [63:0] read_write_buffer; // needs to be 64 bits to fit all data from a setup 
-                                  // transaction
-    reg [6:0] read_write_bits_count;
+    reg write_enable = 0;
+    wire [31:0] read_bits = { nzri_decoded_data, read_write_buffer[31:1] };
+    reg [31:0] read_write_buffer;
+    reg [5:0] read_write_bits_count;
 
     wire differential_1 = usb_d_p && !usb_d_n;
     wire differential_0 = !usb_d_p && usb_d_n;
@@ -91,13 +90,7 @@ module usb(
                 if (read_write_clock_counter == 3) begin
                     if (!skip_bit) begin
                         read_write_buffer <= read_bits;
-                        if (read_write_bits_count > 0) begin
-                            read_write_bits_count <= read_write_bits_count - 1;
-                        end
-
-                        if (read_write_bits_count == 1) begin
-                            write_enable <= 0;
-                        end
+                        got_bit();
                     end
 
                     stall_counter <= stall_counter - 1;
@@ -109,12 +102,6 @@ module usb(
                     end
 
                     previous_data <= data;
-
-                    // this is at the end of the block so it can override
-                    // other values
-                    if (read_write_bits_count == 0 || (!skip_bit && read_write_bits_count == 1)) begin 
-                        read_write_complete();
-                    end
                 end
             end
         endcase
@@ -138,13 +125,9 @@ module usb(
     localparam PACKET_STATE_READING_DATA = 10;
     localparam PACKET_STATE_FINISH = 11;
     localparam PACKET_STATE_WRITE_PAUSE = 12;
-    localparam PACKET_STATE_WRITE_COMPLETE = 13;
+    localparam PACKET_STATE_WRITE_SYNC = 13;
     localparam PACKET_STATE_SEND_EOP = 14;
-
-    localparam TRANSACTION_NONE = 0;
-    localparam TRANSACTION_SETUP = 1;
-    localparam TRANSACTION_IN = 2;
-    localparam TRANSACTION_OUT = 3;
+    localparam PACKET_STATE_WRITE_FINISH = 15;
 
     localparam PENDING_SEND_NONE = 0;
     localparam PENDING_SEND_ACK = 1;
@@ -175,112 +158,116 @@ module usb(
     localparam PID_STALL = 4'b1110;
     localparam PID_NYET = 4'b0110;
 
-    reg [3:0] current_transaction = TRANSACTION_NONE;
+    reg [3:0] current_transaction_pid = 0;
     reg [3:0] pending_send = PENDING_SEND_NONE;
     reg [3:0] packet_state = PACKET_STATE_POWERED;
     reg [3:0] transaction_state = TRANSACTION_STATE_IDLE;
     reg [6:0] device_address = 0;
     reg [3:0] stall_counter;
+    wire read_complete = read_write_bits_count == 1;
+    wire write_complete = read_write_bits_count == 1;
 
-    task read_write_complete();
+    task got_bit();
         send_eop <= 0;
+        if (read_write_bits_count > 0) begin
+            read_write_bits_count <= read_write_bits_count - 1;
+        end
+        write_to_packet_buffer <= 0;
 
         case (packet_state)
             PACKET_STATE_SYNCING: begin
-                if (read_bits[63:56] == 8'b10000000) begin
-                    packet_state <= PACKET_STATE_READING_PID;
-                    read_write_bits_count <= 8;
-                end else begin
-                    `ifdef simulation
-                        $stop;
-                    `else
-                        packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET;
-                    `endif
+                if (read_complete) begin
+                    if (read_bits[31:24] == 8'b10000000) begin
+                        packet_state <= PACKET_STATE_READING_PID;
+                        read_write_bits_count <= 8;
+                    end else begin
+                        `ifdef simulation
+                            $stop;
+                        `else
+                            packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET;
+                        `endif
+                    end
                 end
             end
             PACKET_STATE_READING_PID: begin
-                if (read_bits[59:56] == ~read_bits[63:60]) begin // check PID check
-                    case (transaction_state)
-                        TRANSACTION_STATE_AWAIT_DATA: begin
-                            if (read_bits[59:56] == PID_DATA0) begin
-                                packet_state <= PACKET_STATE_READING_DATA;
-                                read_write_bits_count <= 64;
-                            end else begin
-                                $stop;
-                                packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET;
+                if (read_complete) begin
+                    if (read_bits[27:24] == ~read_bits[31:28]) begin // check PID check
+                        case (transaction_state)
+                            TRANSACTION_STATE_AWAIT_DATA: begin
+                                if (read_bits[27:24] == PID_DATA0) begin
+                                    packet_state <= PACKET_STATE_READING_DATA;
+                                    packet_buffer_address <= 0;
+                                    read_write_bits_count <= 32;
+                                end else begin
+                                    $stop;
+                                    packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET;
+                                end
                             end
-                        end
-                        TRANSACTION_STATE_IDLE: begin
-                            case (read_bits[59:56])
-                                PID_SETUP: begin
+                            TRANSACTION_STATE_IDLE: begin
+                                if (read_bits[27:24] == PID_IN
+                                    || read_bits[27:24] == PID_OUT
+                                    || read_bits[27:24] == PID_SETUP
+                                ) begin
                                     read_write_bits_count <= 16;
-                                    current_transaction <= TRANSACTION_SETUP;
+                                    current_transaction_pid <= read_bits[27:24];
                                     packet_state <= PACKET_STATE_READING_TOKEN;
                                     transaction_state <= TRANSACTION_STATE_AWAIT_DATA;
-                                end
-                                default: begin
+                                end else begin
                                     `ifdef simulation
                                         $stop;
                                     `endif
                                     packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET;
                                 end
-                            endcase
-                        end
-                        default:
-                            `ifdef simulation
-                                $stop;
-                            `endif
-                    endcase
-                end else begin
-                    `ifdef simulation
-                        $stop;
-                    `else
-                        packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET;
-                    `endif
-                end
+                            end
+                            default:
+                                `ifdef simulation
+                                    $stop;
+                                `else
+                                    packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET;
+                                `endif
+                        endcase
+                    end else begin
+                        `ifdef simulation
+                            $stop;
+                        `else
+                            packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET;
+                        `endif
+                    end
+                end 
             end
             PACKET_STATE_READING_TOKEN: begin
-                if (read_bits[54:48] == device_address && read_bits[58:55] == 0) begin
-                    transaction_state <= TRANSACTION_STATE_AWAIT_DATA;
-                    packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET; // TODO ignore if not receiving EOP immediately?
-                end else begin
-                    $stop();
-                    current_transaction <= TRANSACTION_NONE;
-                    packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET;
+                if (read_complete) begin
+                    if (read_bits[22:16] == device_address && read_bits[26:23] == 0) begin
+                        if (current_transaction_pid == PID_OUT || current_transaction_pid == PID_SETUP) begin
+                            transaction_state <= TRANSACTION_STATE_AWAIT_DATA;
+                            packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET; // TODO ignore if not receiving EOP immediately?
+                        end else if (current_transaction_pid == PID_IN) begin
+                            // TODO handle sending data packet
+                        end else begin
+                            // this is an internal error, should never happen
+                            $stop;
+                        end
+                    end else begin
+                        $stop;
+                        current_transaction_pid <= 0;
+                        packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET;
+                    end
                 end
             end
             PACKET_STATE_READING_DATA: begin
-                if (current_transaction == TRANSACTION_SETUP) begin
-                    case (read_bits[15:8]) // bRequest value
-                        BREQUEST_CLEAR_FEATURE: begin
-                        end
-                        BREQUEST_GET_CONFIGURATION: begin
-                        end
-                        BREQUEST_GET_DESCRIPTOR: begin
-                        end
-                        BREQUEST_GET_INTERFACE: begin
-                        end
-                        BREQUEST_GET_STATUS: begin
-                        end
-                        BREQUEST_SET_ADDRESS: begin
-                            device_address <= read_bits[22:16];
-                        end
-                        BREQUEST_SET_CONFIGURATION: begin
-                        end
-                        BREQUEST_SET_DESCRIPTOR: begin
-                        end
-                        BREQUEST_SET_FEATURE: begin
-                        end
-                        BREQUEST_SET_INTERFACE: begin
-                        end
-                        BREQUEST_SYNCH_FRAME: begin
-                        end
-                    endcase
-
-                    packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET;
+                if (se0) begin
+                    packet_state <= PACKET_STATE_FINISH;
+                    packet_buffer_write_value <= read_bits >> (read_write_bits_count - 1);
+                    packet_buffer_address <= packet_buffer_address + 1;
+                    write_to_packet_buffer <= 1;
+                    got_usb_packet <= 1;
                     pending_send <= PENDING_SEND_ACK;
-                end else begin
-                    $stop;
+                    packet_state <= PACKET_STATE_FINISH;
+                end else if (read_complete) begin
+                    // TODO check if packet buffer address are correct
+                    packet_buffer_write_value <= read_bits;
+                    packet_buffer_address <= packet_buffer_address + 1;
+                    write_to_packet_buffer <= 1;
                 end
             end
             PACKET_STATE_AWAIT_END_OF_PACKET: begin
@@ -292,7 +279,7 @@ module usb(
             end
             PACKET_STATE_FINISH: begin // to implement a pause after receiving eop
                 if (pending_send != PENDING_SEND_NONE) begin
-                    stall_counter <= 4; // could be shorter while still complying with spec
+                    stall_counter <= 4; // could be shorter while still complying with spec // TODO use read_write_bits_count instead of separate stall counter
                     packet_state <= PACKET_STATE_WRITE_PAUSE;
                 end else begin
                     top_state <= TOP_STATE_IDLE;
@@ -300,35 +287,46 @@ module usb(
             end
             PACKET_STATE_WRITE_PAUSE: begin
                 if (stall_counter == 0) begin
+                    if (pending_send != PENDING_SEND_NONE) begin
+                        consecutive_nzri_data_ones <= 0;
+                        write_enable <= 1;
+                        packet_state <= PACKET_STATE_WRITE_SYNC;
+                        read_write_bits_count <= 8;
+                        read_write_buffer[7:0] <= DECODED_SYNC_PATTERN;
+                    end else begin
+                        // should not happen
+                        $stop;
+                    end
+                end
+            end
+            PACKET_STATE_WRITE_SYNC: begin
+                if (write_complete) begin
                     case (pending_send)
                         PENDING_SEND_ACK: begin
                             packet_state <= PACKET_STATE_WRITE;
-                            write({  48'bx, 4'b0, PID_ACK }, 8);
+                            read_write_bits_count <= 8;
+                            read_write_buffer[7:0] <= { ~PID_ACK, PID_ACK };
+                            packet_state <= PACKET_STATE_WRITE;
                         end
-                        default: begin
-                            $stop;
-                        end
+                        default:
+                            $stop; // for now
                     endcase
                 end
             end
             PACKET_STATE_WRITE: begin
-                write_enable <= 1;
-                send_eop <= 1;
-                packet_state <= PACKET_STATE_SEND_EOP;
+                if (write_complete) begin
+                    send_eop <= 1;
+                    packet_state <= PACKET_STATE_SEND_EOP;
+                end
             end
             PACKET_STATE_SEND_EOP: begin
-                write_enable <= 1;
                 send_eop <= 1;
+                packet_state <= PACKET_STATE_WRITE_FINISH;
+            end
+            PACKET_STATE_WRITE_FINISH: begin
+                write_enable <= 0;
                 top_state <= TOP_STATE_IDLE;
             end
         endcase
     endtask
-
-    task write(input [55:0] data, input [6:0] bit_count);
-        consecutive_nzri_data_ones <= 0;
-        write_enable <= 1;
-        read_write_bits_count <= bit_count + 8;
-        read_write_buffer <= { data, DECODED_SYNC_PATTERN };
-    endtask
-
 endmodule

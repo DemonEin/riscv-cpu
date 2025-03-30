@@ -150,8 +150,9 @@ module tb_usb();
     task assert_receive_ack();
         $display("waiting to receive ack packet");
         receive_packet();
-        if (!(received_bit_count == 8 && data_list[0] != { ~PID_ACK, PID_ACK })) begin
-            $stop("did not receive ack");
+        if (!(received_bit_count == 8 && data_list[0] == { ~PID_ACK, PID_ACK })) begin
+            $display("did not receive ack");
+            $stop;
         end
     endtask
 
@@ -237,7 +238,8 @@ module tb_usb();
             #FULL_SPEED_PERIOD;
             receive_timeout = receive_timeout - 1;
             if (receive_timeout == 0) begin
-                $stop("timeout when waiting to receive packet");
+                $display("timeout when waiting to receive packet");
+                $stop;
             end
         end
 
