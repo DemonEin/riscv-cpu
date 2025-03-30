@@ -423,7 +423,7 @@ module usb(
         pending_load <= next_pending_load;
         current_transaction_pid <= next_current_transaction_pid;
         pending_send <= next_pending_send;
-        next_write_enable <= write_enable;
+        write_enable <= next_write_enable;
         send_eop <= next_send_eop;
         words_read_written <= next_words_read_written;
 
