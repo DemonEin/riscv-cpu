@@ -21,7 +21,8 @@ module usb(
     output reg [31:0] packet_buffer_write_value,
     output reg write_to_packet_buffer,
     input usb_packet_ready,
-    output [31:0] usb_data_length
+    output [9:0] set_usb_data_length,
+    input [9:0] usb_data_length
 );
     reg [1:0] top_state = TOP_STATE_POWERED;
 
@@ -48,6 +49,7 @@ module usb(
     assign usb_d_n = write_enable ? output_data_n : 1'bz;
     reg output_data, output_data_n;
     reg send_eop = 0;
+    reg [1:0] pending_load = 0;
 
     always @* begin
         if (send_eop) begin
@@ -104,6 +106,13 @@ module usb(
 
                     previous_data <= data;
                 end
+
+                if (pending_load == 2) begin
+                    pending_load <= 1;
+                end else if (pending_load == 1) begin
+                    read_write_buffer <= packet_buffer_read_value;
+                    pending_load <= 0;
+                end
             end
         endcase
 
@@ -114,7 +123,7 @@ module usb(
         end
     end
 
-    localparam PACKET_STATE_POWERED = 0;
+    localparam PACKET_STATE_WRITE_DATA = 0;
     localparam PACKET_STATE_READING = 2;
     localparam PACKET_STATE_READ_COMPLETE = 3;
     localparam PACKET_STATE_DONE = 4;
@@ -133,9 +142,11 @@ module usb(
     localparam PENDING_SEND_NONE = 0;
     localparam PENDING_SEND_ACK = 1;
     localparam PENDING_SEND_NAK = 2;
+    localparam PENDING_SEND_DATA = 2;
 
     localparam TRANSACTION_STATE_IDLE = 0;
     localparam TRANSACTION_STATE_AWAIT_DATA = 1;
+    localparam TRANSACTION_STATE_AWAIT_HANDSHAKE = 1;
 
     localparam BREQUEST_GET_STATUS = 0;
     localparam BREQUEST_CLEAR_FEATURE = 1;
@@ -161,7 +172,7 @@ module usb(
 
     reg [3:0] current_transaction_pid = 0;
     reg [3:0] pending_send = PENDING_SEND_NONE;
-    reg [3:0] packet_state = PACKET_STATE_POWERED;
+    reg [3:0] packet_state;
     reg [3:0] transaction_state = TRANSACTION_STATE_IDLE;
     reg [6:0] device_address = 0;
     reg [3:0] stall_counter;
@@ -243,7 +254,8 @@ module usb(
                             transaction_state <= TRANSACTION_STATE_AWAIT_DATA;
                             packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET; // TODO ignore if not receiving EOP immediately?
                         end else if (current_transaction_pid == PID_IN) begin
-                            // TODO handle sending data packet
+                            pending_send <= PENDING_SEND_DATA;
+                            packet_state <= PACKET_STATE_AWAIT_END_OF_PACKET;
                         end else begin
                             // this is an internal error, should never happen
                             $stop;
@@ -309,6 +321,12 @@ module usb(
                             read_write_buffer[7:0] <= { ~PID_ACK, PID_ACK };
                             packet_state <= PACKET_STATE_WRITE;
                         end
+                        PENDING_SEND_DATA: begin
+                            packet_state <= PACKET_STATE_WRITE_DATA;
+                            packet_buffer_address <= 0;
+                            pending_load <= 2;
+                            read_write_bits_count <= bytes_to_read_write_bit_count(usb_data_length);
+                        end
                         default:
                             $stop; // for now
                     endcase
@@ -320,6 +338,24 @@ module usb(
                     packet_state <= PACKET_STATE_SEND_EOP;
                 end
             end
+            PACKET_STATE_WRITE_DATA: begin
+                // this write code is complicated :(
+                if (write_complete) begin
+                    // bytes already sent, rounded up to the nearest 4 bytes = (packet_buffer_address + 1) * 4
+                    if (usb_data_length > ({ 2'b0, packet_buffer_address } + 1) * 4) begin
+                        packet_buffer_address <= packet_buffer_address + 1;
+                        pending_load <= 2; // needed because reads from memory are delayed one clock cycle 
+                                           // (of the module input clock, not a bit time)
+                        // bytes still needed to be sent = usb_data_length - bytes already sent
+                        read_write_bits_count <= bytes_to_read_write_bit_count(usb_data_length - (({ 2'b0, packet_buffer_address } + 1) * 4));
+                    end else begin
+                        send_eop <= 1;
+                        packet_state <= PACKET_STATE_SEND_EOP;
+                    end
+                end
+
+                // TODO need to send the CRC16 at the end of the packet
+            end
             PACKET_STATE_SEND_EOP: begin
                 send_eop <= 1;
                 packet_state <= PACKET_STATE_WRITE_FINISH;
@@ -330,4 +366,17 @@ module usb(
             end
         endcase
     endtask
+
+    function [5:0] bytes_to_read_write_bit_count(input [9:0] bytes);
+        if (bytes > 4) begin
+            bytes_to_read_write_bit_count = 32;
+        end else begin
+            bytes_to_read_write_bit_count = workaround_select(bytes * 8);
+        end
+    endfunction
+
+    // syntax workaround, there probably a proper way to do this, whatever
+    function [5:0] workaround_select(input [9:0] in);
+        workaround_select = in[5:0];
+    endfunction
 endmodule
