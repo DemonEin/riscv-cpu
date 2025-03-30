@@ -19,7 +19,7 @@ void on_trap() {
             for (uint32_t i = 0; usb_packet_buffer[i] != '\0'; i++) {
                 simulation_putc(usb_packet_buffer[i]);
             }
-            clear_usb_interrupt();
+            usb_data_length = 0;
             break;
         default:
             fail();

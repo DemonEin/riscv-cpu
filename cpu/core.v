@@ -56,8 +56,6 @@ localparam FUNC12_EBREAK = 12'b1;
 localparam FUNC12_MRET = 12'b001100000010;
 localparam FUNC12_WFI = 12'b000100000101;
 
-// custom instructions
-localparam FUNC12_CLEAR_USB_INTERRUPT = 12'b111011000000;
 `ifdef simulation
 localparam FUNC12_TEST_PASS = 12'b100011000000;
 localparam FUNC12_TEST_FAIL = 12'b110011000000;
@@ -420,11 +418,6 @@ module core(
                                     end
                                     FUNC12_WFI: begin
                                         // nop
-                                    end
-                                    // custom instruction for telling the usb
-                                    // hardware the packet has been handled
-                                    FUNC12_CLEAR_USB_INTERRUPT: begin
-                                        handled_usb_packet = 1;
                                     end
                                     `ifdef simulation 
                                         // custom instructions for running tests

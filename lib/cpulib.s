@@ -20,11 +20,6 @@ sleep_for_clock_cycles_loop:
     bgt a0, zero, sleep_for_clock_cycles_loop
     ret
 
-.global clear_usb_interrupt
-clear_usb_interrupt:
-    .insn 0xec000073 # custom instruction
-    ret
-
 .global pass
 pass:
     .insn 0x8c000073 # custom instruction to pass test

@@ -20,7 +20,8 @@ module usb(
     input [31:0] packet_buffer_read_value,
     output reg [31:0] packet_buffer_write_value,
     output reg write_to_packet_buffer,
-    input usb_packet_ready
+    input usb_packet_ready,
+    output [31:0] usb_data_length
 );
     reg [1:0] top_state = TOP_STATE_POWERED;
 

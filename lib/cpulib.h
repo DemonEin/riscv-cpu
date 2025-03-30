@@ -21,6 +21,7 @@ typedef unsigned long long uint64_t;
 
 extern volatile bool led;
 extern volatile char usb_packet_buffer[1024];
+extern volatile uint32_t usb_data_length;
 
 void set_timer(uint64_t);
 void sleep_for_clock_cycles(uint32_t);
