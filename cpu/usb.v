@@ -16,7 +16,7 @@ module usb(
     inout usb_d_n,
     output usb_pullup = 1,
     output reg got_usb_packet, 
-    output reg [$clog2(USB_PACKET_BUFFER_SIZE / 4) - 1:0] packet_buffer_address = 0,
+    output reg [7:0] packet_buffer_address,
     input [31:0] packet_buffer_read_value,
     output reg [31:0] packet_buffer_write_value,
     output reg write_to_packet_buffer,
@@ -79,7 +79,7 @@ module usb(
     reg [31:0] next_read_write_buffer;
     reg [3:0] next_stall_counter;
     reg [1:0] next_pending_load;
-    reg [7:0] next_packet_buffer_address;
+    reg [7:0] next_words_read_written;
     reg [3:0] next_transaction_state;
     reg [3:0] next_current_transaction_pid;
     reg [3:0] next_pending_send;
@@ -96,12 +96,18 @@ module usb(
         next_read_write_buffer = read_write_buffer;
         next_stall_counter = stall_counter;
         next_pending_load = pending_load;
-        next_packet_buffer_address = packet_buffer_address;
+        next_words_read_written = words_read_written;
         next_transaction_state = transaction_state;
         next_current_transaction_pid = current_transaction_pid;
         next_pending_send = pending_send;
         next_write_enable = write_enable;
         next_send_eop = send_eop;
+
+        got_usb_packet = 0;
+        packet_buffer_address = 8'bx;
+        packet_buffer_write_value = 32'bx;
+        write_to_packet_buffer = 0;
+        set_usb_data_length = 10'bx;
 
         case (top_state)
             TOP_STATE_POWERED: begin
@@ -202,6 +208,8 @@ module usb(
     reg [3:0] transaction_state = TRANSACTION_STATE_IDLE;
     reg [6:0] device_address = 0;
     reg [3:0] stall_counter;
+    reg [7:0] words_read_written;
+
     wire read_complete = read_write_bits_count == 1;
     wire write_complete = read_write_bits_count == 1;
 
@@ -210,7 +218,6 @@ module usb(
         if (read_write_bits_count > 0) begin
             next_read_write_bits_count = read_write_bits_count - 1;
         end
-        write_to_packet_buffer = 0;
 
         case (packet_state)
             PACKET_STATE_SYNCING: begin
@@ -234,7 +241,7 @@ module usb(
                             TRANSACTION_STATE_AWAIT_DATA: begin
                                 if (read_bits[27:24] == PID_DATA0) begin
                                     next_packet_state = PACKET_STATE_READING_DATA;
-                                    next_packet_buffer_address = 0;
+                                    next_words_read_written = 0;
                                     next_read_write_bits_count = 32;
                                 end else begin
                                     $stop;
@@ -296,17 +303,19 @@ module usb(
             PACKET_STATE_READING_DATA: begin
                 if (se0) begin
                     next_packet_state = PACKET_STATE_FINISH;
+                    // read_write_bits_count - 1 is the number of bits that would still need to be read to get a whole word
                     packet_buffer_write_value = read_bits >> (read_write_bits_count - 1);
-                    next_packet_buffer_address = packet_buffer_address + 1;
+                    packet_buffer_address = words_read_written;
+                    // 33 - read_write_bits_count is the number of bits that have been read on this word
+                    set_usb_data_length = (words_read_written * 4) + ((33 - { 4'b0, read_write_bits_count }) / 8);
                     write_to_packet_buffer = 1;
                     got_usb_packet = 1;
                     next_pending_send = PENDING_SEND_ACK;
                     next_packet_state = PACKET_STATE_FINISH;
                     next_transaction_state = TRANSACTION_STATE_IDLE;
                 end else if (read_complete) begin
-                    // TODO check if packet buffer address are correct
                     packet_buffer_write_value = read_bits;
-                    next_packet_buffer_address = packet_buffer_address + 1;
+                    next_words_read_written = words_read_written + 1;
                     write_to_packet_buffer = 1;
                 end
             end
@@ -416,6 +425,7 @@ module usb(
         pending_send <= next_pending_send;
         next_write_enable <= write_enable;
         send_eop <= next_send_eop;
+        words_read_written <= next_words_read_written;
 
         if (se0) begin
             reset_counter <= reset_counter + 1;
