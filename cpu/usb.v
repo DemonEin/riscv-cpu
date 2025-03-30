@@ -323,10 +323,17 @@ module usb(
                             packet_state <= PACKET_STATE_WRITE;
                         end
                         PENDING_SEND_DATA: begin
-                            packet_state <= PACKET_STATE_WRITE_DATA;
-                            packet_buffer_address <= 0;
-                            pending_load <= 2;
-                            read_write_bits_count <= bytes_to_read_write_bit_count(usb_data_length);
+                            if (usb_data_length > 0) begin
+                                packet_state <= PACKET_STATE_WRITE_DATA;
+                                packet_buffer_address <= 0;
+                                pending_load <= 2;
+                                read_write_bits_count <= bytes_to_read_write_bit_count(usb_data_length);
+                            end else begin
+                                packet_state <= PACKET_STATE_WRITE;
+                                read_write_bits_count <= 8;
+                                read_write_buffer[7:0] <= { ~PID_NAK, PID_NAK };
+                                packet_state <= PACKET_STATE_WRITE;
+                            end
                         end
                         default:
                             $stop; // for now
