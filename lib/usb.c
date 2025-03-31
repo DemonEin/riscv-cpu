@@ -53,7 +53,9 @@ static struct bConfiguration configuration = {
     sizeof(configuration),
     1,
     0,
-    0
+    0,
+    0b10000000,
+    0 // TODO come up with a real number for this
 };
 
 static uint16_t make_usb_response() {
