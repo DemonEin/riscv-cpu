@@ -178,7 +178,7 @@ module usb(
 
     localparam TRANSACTION_STATE_IDLE = 0;
     localparam TRANSACTION_STATE_AWAIT_DATA = 1;
-    localparam TRANSACTION_STATE_AWAIT_HANDSHAKE = 1;
+    localparam TRANSACTION_STATE_AWAIT_HANDSHAKE = 2;
 
     localparam BREQUEST_GET_STATUS = 0;
     localparam BREQUEST_CLEAR_FEATURE = 1;
@@ -244,7 +244,10 @@ module usb(
                                     next_words_read_written = 0;
                                     next_read_write_bits_count = 32;
                                 end else begin
-                                    $stop;
+                                    `ifdef simulation
+                                        $display("got bad pid for context %b", read_bits[27:24]);
+                                        $stop;
+                                    `endif
                                     next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
                                 end
                             end
@@ -263,6 +266,14 @@ module usb(
                                     `endif
                                     next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
                                 end
+                            end
+                            TRANSACTION_STATE_AWAIT_HANDSHAKE: begin
+                                `ifdef simulation
+                                    if (read_bits[27:24] != PID_ACK) begin
+                                        $stop;
+                                    end
+                                `endif
+                                next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
                             end
                             default:
                                 `ifdef simulation
@@ -383,6 +394,8 @@ module usb(
             end
             PACKET_STATE_WRITE_DATA_PID: begin
                 if (write_complete) begin
+                    next_transaction_state = TRANSACTION_STATE_AWAIT_HANDSHAKE;
+
                     if (usb_data_length > 0) begin
                         next_pending_load = 1;
                         next_words_read_written = 0;
