@@ -1,5 +1,6 @@
 led = 0x80000010;
 usb_data_length = 0x80000014;
+usb_token = 0x80000018;
 usb_packet_buffer = 0xc0000000;
 
 MEMORY {

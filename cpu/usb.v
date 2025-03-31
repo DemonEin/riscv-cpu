@@ -22,7 +22,8 @@ module usb(
     output reg write_to_packet_buffer,
     input usb_packet_ready,
     output [9:0] set_usb_data_length,
-    input [9:0] usb_data_length
+    input [9:0] usb_data_length,
+    output reg [11:0] usb_token
 );
     reg [1:0] top_state = TOP_STATE_POWERED;
 
@@ -85,6 +86,7 @@ module usb(
     reg [3:0] next_pending_send;
     reg next_write_enable;
     reg next_send_eop;
+    reg [11:0] next_usb_token;
 
     always @* begin
         next_top_state = top_state;
@@ -102,6 +104,7 @@ module usb(
         next_pending_send = pending_send;
         next_write_enable = write_enable;
         next_send_eop = send_eop;
+        next_usb_token = usb_token;
 
         got_usb_packet = 0;
         packet_buffer_address = 8'bx;
@@ -282,10 +285,11 @@ module usb(
             end
             PACKET_STATE_READING_TOKEN: begin
                 if (read_complete) begin
-                    if (read_bits[22:16] == device_address && read_bits[26:23] == 0) begin
+                    if (read_bits[22:16] == device_address) begin
                         if (current_transaction_pid == PID_OUT || current_transaction_pid == PID_SETUP) begin
                             next_transaction_state = TRANSACTION_STATE_AWAIT_DATA;
                             next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET; // TODO ignore if not receiving EOP immediately?
+                            next_usb_token = { read_bits[26:16],  current_transaction_pid == PID_SETUP };
                         end else if (current_transaction_pid == PID_IN) begin
                             next_pending_send = PENDING_SEND_DATA;
                             next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
@@ -426,6 +430,7 @@ module usb(
         write_enable <= next_write_enable;
         send_eop <= next_send_eop;
         words_read_written <= next_words_read_written;
+        usb_token <= next_usb_token;
 
         if (se0) begin
             reset_counter <= reset_counter + 1;

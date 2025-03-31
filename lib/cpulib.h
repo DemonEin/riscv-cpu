@@ -22,6 +22,10 @@ typedef unsigned long long uint64_t;
 extern volatile bool led;
 extern volatile char usb_packet_buffer[1024];
 extern volatile uint32_t usb_data_length;
+extern const volatile uint16_t usb_token; // bit 0: 0 for in transaction, 1 for setup transaction
+                                          // bits 1-7: address
+                                          // bits 8-11: endpoint
+                                          // rest of bits undefined
 
 void set_timer(uint64_t);
 void sleep_for_clock_cycles(uint32_t);
