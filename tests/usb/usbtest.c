@@ -14,12 +14,7 @@ void on_trap() {
             : "=r" (mcause));
     switch (mcause) {
         case MCAUSE_MACHINE_EXTERNAL_INTERRUPT:
-            // doing this instead of simulation_printing usb packet buffer directly to
-            // cover reading from the usb packet buffer
-            for (uint32_t i = 0; usb_packet_buffer[i] != '\0'; i++) {
-                simulation_putc(usb_packet_buffer[i]);
-            }
-            usb_data_length = 0;
+            handle_usb_transaction();
             break;
         default:
             fail();

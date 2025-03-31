@@ -35,8 +35,8 @@ cpulib.o := $(current_directory)target/lib/cpulib.o
 %.hex: %.bin
 	hexdump -v -e '/4 "%x "' $< > $@
 
-$(cpulib.o): $(lib)/cpulib.h $(lib)/cpulib.c $(lib)/cpulib.s | $(current_directory)target/lib
-	$(gcc_binary_prefix)gcc $(GCC_OPTIONS) -r $(lib)/cpulib.c $(lib)/cpulib.s -o $@
+$(cpulib.o): $(lib)/cpulib.h $(lib)/cpulib.c $(lib)/cpulib.s $(lib)/usb.c | $(current_directory)target/lib
+	$(gcc_binary_prefix)gcc $(GCC_OPTIONS) -r $(lib)/cpulib.c $(lib)/cpulib.s $(lib)/usb.c -o $@
 
 $(target_directory):
 	mkdir -p $@
