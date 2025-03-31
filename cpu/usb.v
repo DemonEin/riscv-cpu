@@ -303,10 +303,14 @@ module usb(
                             next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
                         end else begin
                             // this is an internal error, should never happen
-                            $stop;
+                            `ifdef simulation
+                                $stop;
+                            `endif
                         end
                     end else begin
-                        $stop;
+                        `ifdef simulation
+                            $stop;
+                        `endif
                         next_current_transaction_pid = 0;
                         next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
                     end
@@ -356,7 +360,9 @@ module usb(
                         next_read_write_buffer[7:0] = DECODED_SYNC_PATTERN;
                     end else begin
                         // should not happen
-                        $stop;
+                        `ifdef simulation
+                            $stop;
+                        `endif
                     end
                 end
             end
@@ -381,8 +387,12 @@ module usb(
                                 next_packet_state = PACKET_STATE_WRITE_PID;
                             end
                         end
-                        default:
-                            $stop; // for now
+                        default: begin
+                            // for now
+                            `ifdef simulation
+                                $stop;
+                            `endif
+                        end
                     endcase
                 end
             end
