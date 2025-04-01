@@ -394,6 +394,8 @@ module usb(
                             `endif
                         end
                     endcase
+
+                    next_pending_send = PENDING_SEND_NONE;
                 end
             end
             PACKET_STATE_WRITE_PID: begin
