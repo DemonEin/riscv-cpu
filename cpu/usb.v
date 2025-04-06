@@ -206,7 +206,6 @@ module usb(
     reg [3:0] pending_send = PENDING_SEND_NONE;
     reg [3:0] packet_state;
     reg [3:0] transaction_state = TRANSACTION_STATE_IDLE;
-    reg [6:0] device_address = 0;
     reg [3:0] stall_counter;
     reg [7:0] words_read_written;
 
@@ -294,26 +293,18 @@ module usb(
             end
             PACKET_STATE_READING_TOKEN: begin
                 if (read_complete) begin
-                    if (read_bits[22:16] == device_address) begin
-                        if (current_transaction_pid == PID_OUT || current_transaction_pid == PID_SETUP) begin
-                            next_transaction_state = TRANSACTION_STATE_AWAIT_DATA;
-                            next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET; // TODO ignore if not receiving EOP immediately?
-                            next_usb_token = { read_bits[26:16],  current_transaction_pid == PID_SETUP };
-                        end else if (current_transaction_pid == PID_IN) begin
-                            next_pending_send = PENDING_SEND_DATA;
-                            next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
-                        end else begin
-                            // this is an internal error, should never happen
-                            `ifdef simulation
-                                $stop;
-                            `endif
-                        end
+                    if (current_transaction_pid == PID_OUT || current_transaction_pid == PID_SETUP) begin
+                        next_transaction_state = TRANSACTION_STATE_AWAIT_DATA;
+                        next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET; // TODO ignore if not receiving EOP immediately?
+                        next_usb_token = { read_bits[26:16],  current_transaction_pid == PID_SETUP };
+                    end else if (current_transaction_pid == PID_IN) begin
+                        next_pending_send = PENDING_SEND_DATA;
+                        next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
                     end else begin
+                        // this is an internal error, should never happen
                         `ifdef simulation
                             $stop;
                         `endif
-                        next_current_transaction_pid = 0;
-                        next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
                     end
                 end
             end
