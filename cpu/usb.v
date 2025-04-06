@@ -136,7 +136,9 @@ module usb(
                         got_bit();
                     end
 
-                    next_stall_counter = stall_counter - 1;
+                    if (stall_counter > 0) begin
+                        next_stall_counter = stall_counter - 1;
+                    end
 
                     if (nzri_decoded_data == 1) begin
                         next_consecutive_nzri_data_ones = consecutive_nzri_data_ones + 1;
