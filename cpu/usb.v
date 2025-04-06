@@ -174,7 +174,7 @@ module usb(
     localparam PENDING_SEND_NONE = 0;
     localparam PENDING_SEND_ACK = 1;
     localparam PENDING_SEND_NAK = 2;
-    localparam PENDING_SEND_DATA = 2;
+    localparam PENDING_SEND_DATA = 3;
 
     localparam TRANSACTION_STATE_IDLE = 0;
     localparam TRANSACTION_STATE_AWAIT_DATA = 1;
