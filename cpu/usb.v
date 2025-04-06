@@ -273,6 +273,7 @@ module usb(
                                         $stop;
                                     end
                                 `endif
+                                next_transaction_state = TRANSACTION_STATE_IDLE;
                                 next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
                             end
                             default:
