@@ -240,7 +240,7 @@ module usb(
                     if (read_bits[27:24] == ~read_bits[31:28]) begin // check PID check
                         case (transaction_state)
                             TRANSACTION_STATE_AWAIT_DATA: begin
-                                if (read_bits[27:24] == PID_DATA0) begin
+                                if (read_bits[27:24] == PID_DATA0 || read_bits[27:24] == PID_DATA1) begin // TODO toggle correctly
                                     next_packet_state = PACKET_STATE_READING_DATA;
                                     next_words_read_written = 0;
                                     next_read_write_bits_count = 32;
