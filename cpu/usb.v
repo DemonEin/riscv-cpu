@@ -23,7 +23,7 @@ module usb(
     input usb_packet_ready,
     output [9:0] set_usb_data_length,
     input [9:0] usb_data_length,
-    output reg [11:0] usb_token
+    output reg [12:0] usb_token
 );
     reg [1:0] top_state = TOP_STATE_POWERED;
 
@@ -86,7 +86,7 @@ module usb(
     reg [3:0] next_pending_send;
     reg next_write_enable;
     reg next_send_eop;
-    reg [11:0] next_usb_token;
+    reg [12:0] next_usb_token;
 
     always @* begin
         next_top_state = top_state;
@@ -298,11 +298,12 @@ module usb(
                     if (current_transaction_pid == PID_OUT || current_transaction_pid == PID_SETUP) begin
                         next_transaction_state = TRANSACTION_STATE_AWAIT_DATA;
                         next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET; // TODO ignore if not receiving EOP immediately?
-                        next_usb_token = { read_bits[26:16],  current_transaction_pid == PID_SETUP };
+                        next_usb_token = { read_bits[26:16],  current_transaction_pid[3:2] };
                     end else if (current_transaction_pid == PID_IN) begin
                         got_usb_packet = 1;
                         next_pending_send = PENDING_SEND_DATA;
                         next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
+                        next_usb_token = { read_bits[26:16],  current_transaction_pid[3:2] };
                     end else begin
                         // this is an internal error, should never happen
                         `ifdef simulation

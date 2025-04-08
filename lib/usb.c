@@ -40,9 +40,10 @@ struct bConfiguration {
 
 extern volatile char usb_packet_buffer[1024];
 extern volatile uint16_t usb_data_length;
-extern const volatile uint16_t usb_token; // bit 0: 0 for in transaction, 1 for setup transaction
-                                          // bits 1-7: address
-                                          // bits 8-11: endpoint
+extern const volatile uint16_t usb_token; // bits 0-1: 00 for OUT token, 10 for IN, 11 for SETUP
+                                          //     (the top two bits of the PID)
+                                          // bits 2-8: address
+                                          // bits 9-12: endpoint
                                           // rest of bits undefined
 
 static bool in_control_transfer = false;
