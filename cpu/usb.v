@@ -300,6 +300,7 @@ module usb(
                         next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET; // TODO ignore if not receiving EOP immediately?
                         next_usb_token = { read_bits[26:16],  current_transaction_pid == PID_SETUP };
                     end else if (current_transaction_pid == PID_IN) begin
+                        got_usb_packet = 1;
                         next_pending_send = PENDING_SEND_DATA;
                         next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
                     end else begin
@@ -345,18 +346,13 @@ module usb(
                 end
             end
             PACKET_STATE_WRITE_PAUSE: begin
-                if (stall_counter == 0) begin
-                    if (pending_send != PENDING_SEND_NONE) begin
-                        next_consecutive_nzri_data_ones = 0;
-                        next_write_enable = 1;
-                        next_packet_state = PACKET_STATE_WRITE_SYNC;
-                        next_read_write_bits_count = 8;
-                        next_read_write_buffer[7:0] = DECODED_SYNC_PATTERN;
-                    end else begin
-                        // should not happen
-                        `ifdef simulation
-                            $stop;
-                        `endif
+                if (pending_send == PENDING_SEND_DATA) begin
+                    if (!usb_packet_ready) begin
+                        start_write();
+                    end
+                end else begin
+                    if (stall_counter == 0) begin
+                        start_write();
                     end
                 end
             end
@@ -444,6 +440,14 @@ module usb(
                 next_top_state = TOP_STATE_IDLE;
             end
         endcase
+    endtask
+
+    task start_write();
+        next_consecutive_nzri_data_ones = 0;
+        next_write_enable = 1;
+        next_packet_state = PACKET_STATE_WRITE_SYNC;
+        next_read_write_bits_count = 8;
+        next_read_write_buffer[7:0] = DECODED_SYNC_PATTERN;
     endtask
 
     always @(posedge clock48) begin

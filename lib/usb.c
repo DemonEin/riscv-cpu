@@ -58,6 +58,22 @@ static struct bConfiguration configuration = {
     0 // TODO come up with a real number for this
 };
 
+// an usb external interrupt is trigger when receiving the data packet of an OUT transaction
+// and the token packet of an IN transaction
+//
+// in an OUT transaction:
+//     usb_token contains other data the address, endpoint, and token type
+//     usb_data_length contains the length in bytes of the data section
+//     usb_packet_buffer contains the data
+//     any write to usb_data_length clears the interrupt, signals to
+//         the gateware it now owns the data buffer, and causes the gateware
+//         to send a handshake of the type specified by usb_token
+//
+// in an IN transaction:
+//     usb_token contains other data the address, endpoint, and token type
+//     any write to usb_data_length clears the interrupt and causes the
+//         gateware to send the first usb_data_length bytes in usb_packet_buffer
+//         in a data packet
 static uint16_t make_usb_response() {
     if (((usb_token & 0b11111110) >> 1) != device_address) {
         return 0;
