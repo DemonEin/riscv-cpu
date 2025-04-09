@@ -21,9 +21,8 @@ module usb(
     output reg [31:0] packet_buffer_write_value,
     output reg write_to_packet_buffer,
     input usb_packet_ready,
-    output [9:0] set_usb_data_length,
-    input [9:0] usb_data_length,
-    output reg [12:0] usb_token
+    input [31:0] usb_control,
+    output reg [31:0] set_usb_control
 );
     reg [1:0] top_state = TOP_STATE_POWERED;
 
@@ -86,7 +85,6 @@ module usb(
     reg [3:0] next_pending_send;
     reg next_write_enable;
     reg next_send_eop;
-    reg [12:0] next_usb_token;
 
     always @* begin
         next_top_state = top_state;
@@ -104,13 +102,12 @@ module usb(
         next_pending_send = pending_send;
         next_write_enable = write_enable;
         next_send_eop = send_eop;
-        next_usb_token = usb_token;
 
         got_usb_packet = 0;
         packet_buffer_address = 8'bx;
         packet_buffer_write_value = 32'bx;
         write_to_packet_buffer = 0;
-        set_usb_data_length = 10'bx;
+        set_usb_control = 32'bx;
 
         case (top_state)
             TOP_STATE_POWERED: begin
@@ -298,12 +295,11 @@ module usb(
                     if (current_transaction_pid == PID_OUT || current_transaction_pid == PID_SETUP) begin
                         next_transaction_state = TRANSACTION_STATE_AWAIT_DATA;
                         next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET; // TODO ignore if not receiving EOP immediately?
-                        next_usb_token = { read_bits[26:16],  current_transaction_pid[3:2] };
                     end else if (current_transaction_pid == PID_IN) begin
                         got_usb_packet = 1;
                         next_pending_send = PENDING_SEND_DATA;
                         next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
-                        next_usb_token = { read_bits[26:16],  current_transaction_pid[3:2] };
+                        set_usb_control[22:10] = { read_bits[26:16],  current_transaction_pid[3:2] };
                     end else begin
                         // this is an internal error, should never happen
                         `ifdef simulation
@@ -319,7 +315,7 @@ module usb(
                     packet_buffer_write_value = read_bits >> (read_write_bits_count - 1);
                     packet_buffer_address = words_read_written;
                     // 33 - read_write_bits_count is the number of bits that have been read on this word
-                    set_usb_data_length = (words_read_written * 4) + ((33 - { 4'b0, read_write_bits_count }) / 8);
+                    set_usb_control[9:0] = (words_read_written * 4) + ((33 - { 4'b0, read_write_bits_count }) / 8);
                     write_to_packet_buffer = 1;
                     got_usb_packet = 1;
                     next_pending_send = PENDING_SEND_ACK;
@@ -399,11 +395,11 @@ module usb(
                 if (write_complete) begin
                     next_transaction_state = TRANSACTION_STATE_AWAIT_HANDSHAKE;
 
-                    if (usb_data_length > 0) begin
+                    if (usb_control[9:0] > 0) begin // data length
                         next_pending_load = 1;
                         next_words_read_written = 0;
                         packet_buffer_address = 0;
-                        next_read_write_bits_count = bytes_to_read_write_bit_count(usb_data_length);
+                        next_read_write_bits_count = bytes_to_read_write_bit_count(usb_control[9:0]);
                         next_packet_state = PACKET_STATE_WRITE_DATA;
                     end else begin
                         next_send_eop = 1;
@@ -415,7 +411,7 @@ module usb(
                 // this write code is complicated :(
                 if (write_complete) begin
                     next_words_read_written = words_read_written + 1;
-                    if (usb_data_length > (next_words_read_written * 4)) begin // if usb_data_length is greater than the number
+                    if (usb_control[9:0] > (next_words_read_written * 4)) begin // if usb_data_length is greater than the number
                                                                                // of bytes that have been written, it is
                                                                                // guaranteed to greater than next_words_written * 4
                                                                                // because 4 bytes are always written if there
@@ -423,7 +419,7 @@ module usb(
                         packet_buffer_address = next_words_read_written;
                         next_pending_load = 1; // needed because reads from memory are delayed one clock cycle
                                                // (of the module input clock, not a bit time)
-                        next_read_write_bits_count = bytes_to_read_write_bit_count(usb_data_length - (next_words_read_written * 4));
+                        next_read_write_bits_count = bytes_to_read_write_bit_count(usb_control[9:0] - (next_words_read_written * 4));
                     end else begin
                         next_send_eop = 1;
                         next_packet_state = PACKET_STATE_SEND_EOP;
@@ -467,7 +463,6 @@ module usb(
         write_enable <= next_write_enable;
         send_eop <= next_send_eop;
         words_read_written <= next_words_read_written;
-        usb_token <= next_usb_token;
 
         if (se0) begin
             reset_counter <= reset_counter + 1;

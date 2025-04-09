@@ -5,8 +5,7 @@ localparam ADDRESS_MTIMEH = ADDRESS_MTIME + 4;
 localparam ADDRESS_MTIMECMP = ADDRESS_MTIMEH + 4;
 localparam ADDRESS_MTIMECMPH = ADDRESS_MTIMECMP + 4;
 localparam ADDRESS_LED = 32'h80000010;
-localparam ADDRESS_USB_DATA_LENGTH = 32'h80000014;
-localparam ADDRESS_USB_TOKEN = 32'h80000018;
+localparam ADDRESS_USB_CONTROL = 32'h80000014;
 localparam ADDRESS_USB_PACKET_BUFFER = 32'hc0000000;
 
 localparam USB_PACKET_BUFFER_SIZE = 1024; // in bytes
@@ -42,11 +41,10 @@ module top(
     wire write_to_usb_packet_buffer;
     wire handled_usb_packet;
     wire got_usb_packet;
-    wire [9:0] usb_usb_data_length;
-    wire [12:0] usb_usb_token;
+    wire [31:0] usb_usb_control;
 
     core core(clk24, next_program_counter, program_memory_value, memory_address, unshifted_memory_write_value, unshifted_memory_write_sections, memory_read_value, usb_packet_ready, handled_usb_packet, mip_mtip);
-    usb usb(clk48, usb_d_p, usb_d_n, usb_pullup, got_usb_packet, usb_packet_buffer_address, usb_packet_buffer_read_value, usb_module_usb_packet_buffer_write_value, write_to_usb_packet_buffer, usb_packet_ready, usb_usb_data_length, usb_data_length, usb_usb_token);
+    usb usb(clk48, usb_d_p, usb_d_n, usb_pullup, got_usb_packet, usb_packet_buffer_address, usb_packet_buffer_read_value, usb_module_usb_packet_buffer_write_value, write_to_usb_packet_buffer, usb_packet_ready, usb_control, usb_usb_control);
 
     // continuously assigned wires
     wire [3:0] usb_packet_buffer_write_sections = addressing_usb_packet_buffer ? memory_write_sections : write_to_usb_packet_buffer ? 4'b1111 : 0;
@@ -105,12 +103,8 @@ module top(
                 memory_mapped_register_read_value <= { 31'b0, led_on };
                 read_memory_mapped_register <= 1;
             end
-            ADDRESS_USB_DATA_LENGTH[31:2]: begin
-                memory_mapped_register_read_value <= { 22'b0, usb_data_length };
-                read_memory_mapped_register <= 1;
-            end
-            ADDRESS_USB_TOKEN[31:2]: begin
-                memory_mapped_register_read_value <= { 19'b0, usb_token };
+            ADDRESS_USB_CONTROL[31:2]: begin
+                memory_mapped_register_read_value <= usb_control;
                 read_memory_mapped_register <= 1;
             end
             default: begin
@@ -213,8 +207,7 @@ module top(
     reg [31:0] usb_packet_buffer[USB_PACKET_BUFFER_SIZE / 4];
     reg usb_packet_ready = 0; // 1 means the core owns the buffer, 0 means the usb
                               // module owns the buffer
-    reg [9:0] usb_data_length = 0;
-    reg [12:0] usb_token;
+    reg [31:0] usb_control;
 
     always @(posedge clk48) begin
         if (usb_packet_buffer_write_sections[0]) begin
@@ -232,16 +225,21 @@ module top(
 
         if (got_usb_packet) begin
             usb_packet_ready <= 1;
-            usb_data_length <= usb_usb_data_length;
-            usb_token <= usb_usb_token;
-        end else if (memory_address[31:2] == ADDRESS_USB_DATA_LENGTH[31:2] && memory_write_sections != 0) begin
+            usb_control <= usb_usb_control;
+        end else if (memory_address[31:2] == ADDRESS_USB_CONTROL[31:2] && memory_write_sections != 0) begin
             usb_packet_ready <= 0;
 
             if (memory_write_sections[0]) begin
-                usb_data_length[7:0] <= memory_write_value[7:0];
+                usb_control[7:0] <= memory_write_value[7:0];
             end
             if (memory_write_sections[1]) begin
-                usb_data_length[9:8] <= memory_write_value[9:8];
+                usb_control[15:8] <= memory_write_value[15:8];
+            end
+            if (memory_write_sections[2]) begin
+                usb_control[23:16] <= memory_write_value[23:16];
+            end
+            if (memory_write_sections[3]) begin
+                usb_control[31:24] <= memory_write_value[31:24];
             end
         end
     end
