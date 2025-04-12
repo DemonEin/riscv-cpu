@@ -77,15 +77,8 @@ extern volatile uint8_t usb_data_buffer[1023];
  */
 extern volatile uint32_t usb_control;
 
-static enum control_transfer_state {
-    CONTROL_TRANSFER_STATE_NONE,
-    CONTROL_TRANSFER_STATE_IN,
-    CONTROL_TRANSFER_STATE_OUT,
-    CONTROL_TRANSFER_STATE_SET_ADDRESS,
-} control_transfer_state;
-
-static bool has_pending_device_address = false;
-static uint8_t pending_device_address;
+static bool in_control_transfer;
+static struct setup_data setup_data;
 
 static uint8_t device_address = 0;
 static struct bConfiguration configuration = {
@@ -110,24 +103,8 @@ static struct data_response handle_setup_transaction(uint16_t data_length) {
         return (struct data_response) { true, 0 };
     }
 
-    struct setup_data* setup_data = (struct setup_data*) usb_data_buffer;
-
-    control_transfer_state = (setup_data->bmRequestType & (1 << 7))
-            ? CONTROL_TRANSFER_STATE_IN
-            : CONTROL_TRANSFER_STATE_OUT;
-
-    switch (setup_data->bRequest) {
-        case BREQUEST_SET_ADDRESS:
-            pending_device_address = setup_data->wValue;
-            has_pending_device_address = true;
-            simulation_print("got set address packet");
-            return (struct data_response) { false, HANDSHAKE_ACK };
-        case BREQUEST_GET_CONFIGURATION:
-            break;
-    }
-
-    control_transfer_state = CONTROL_TRANSFER_STATE_NONE;
-    return (struct data_response) { true, 0 };
+    setup_data = *(volatile struct setup_data*) usb_data_buffer;
+    return (struct data_response) { false, HANDSHAKE_ACK };
 }
 
 static struct data_response handle_out_transaction(uint16_t data_length) {
@@ -137,16 +114,15 @@ static struct data_response handle_out_transaction(uint16_t data_length) {
 // returns the number of bytes to send from usb_data_buffer
 static uint16_t handle_in_transaction() {
     simulation_print("handle_in_transaction");
-    if (control_transfer_state == CONTROL_TRANSFER_STATE_OUT) {
-        // this is the status stage of the control transfer
+    if (in_control_transfer && (setup_data.bmRequestType & (1 << 7))) {
+        // this is the status stage of an out control transfer
 
         // needed because setting the address needs to be delayed until the status stage
-        if (has_pending_device_address) {
-            device_address = pending_device_address;
-            has_pending_device_address = false;
+        if (setup_data.bRequest == BREQUEST_SET_ADDRESS) {
+            device_address = setup_data.wValue;
         }
 
-        control_transfer_state = CONTROL_TRANSFER_STATE_NONE;
+        in_control_transfer = false;
         return 0;
     }
 
