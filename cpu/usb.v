@@ -228,7 +228,7 @@ module usb(
 
     wire read_complete = read_write_bits_count == 1;
     wire write_complete = read_write_bits_count == 1;
-    wire [3:0] usb_control_handshake_pid = { usb_control[22:21], 2'b01 };
+    wire [3:0] usb_control_handshake_pid = { usb_control[22:21], 2'b10 };
 
     task got_bit();
         next_send_eop = 0;
