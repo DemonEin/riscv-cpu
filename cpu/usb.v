@@ -16,10 +16,10 @@ module usb(
     inout usb_d_n,
     output usb_pullup = 1,
     output reg got_usb_packet, 
-    output reg [7:0] packet_buffer_address,
-    input [31:0] packet_buffer_read_value,
-    output reg [31:0] packet_buffer_write_value,
-    output reg write_to_packet_buffer,
+    output reg [7:0] data_buffer_address,
+    input [31:0] data_buffer_read_value,
+    output reg [31:0] data_buffer_write_value,
+    output reg write_to_data_buffer,
     input usb_packet_ready,
     input [31:0] usb_control,
     output reg [31:0] set_usb_control
@@ -104,9 +104,9 @@ module usb(
         next_send_eop = send_eop;
 
         got_usb_packet = 0;
-        packet_buffer_address = 8'bx;
-        packet_buffer_write_value = 32'bx;
-        write_to_packet_buffer = 0;
+        data_buffer_address = 8'bx;
+        data_buffer_write_value = 32'bx;
+        write_to_data_buffer = 0;
         set_usb_control = 32'bx;
 
         case (top_state)
@@ -147,7 +147,7 @@ module usb(
                 end
 
                 if (pending_load) begin
-                    next_read_write_buffer = packet_buffer_read_value;
+                    next_read_write_buffer = data_buffer_read_value;
                 end
             end
         endcase
@@ -312,19 +312,19 @@ module usb(
                 if (se0) begin
                     next_packet_state = PACKET_STATE_FINISH;
                     // read_write_bits_count - 1 is the number of bits that would still need to be read to get a whole word
-                    packet_buffer_write_value = read_bits >> (read_write_bits_count - 1);
-                    packet_buffer_address = words_read_written;
+                    data_buffer_write_value = read_bits >> (read_write_bits_count - 1);
+                    data_buffer_address = words_read_written;
                     // 33 - read_write_bits_count is the number of bits that have been read on this word
                     set_usb_control[9:0] = (words_read_written * 4) + ((33 - { 4'b0, read_write_bits_count }) / 8);
-                    write_to_packet_buffer = 1;
+                    write_to_data_buffer = 1;
                     got_usb_packet = 1;
                     next_pending_send = PENDING_SEND_ACK;
                     next_packet_state = PACKET_STATE_FINISH;
                     next_transaction_state = TRANSACTION_STATE_IDLE;
                 end else if (read_complete) begin
-                    packet_buffer_write_value = read_bits;
+                    data_buffer_write_value = read_bits;
                     next_words_read_written = words_read_written + 1;
-                    write_to_packet_buffer = 1;
+                    write_to_data_buffer = 1;
                 end
             end
             PACKET_STATE_AWAIT_END_OF_PACKET: begin
@@ -398,7 +398,7 @@ module usb(
                     if (usb_control[9:0] > 0) begin // data length
                         next_pending_load = 1;
                         next_words_read_written = 0;
-                        packet_buffer_address = 0;
+                        data_buffer_address = 0;
                         next_read_write_bits_count = bytes_to_read_write_bit_count(usb_control[9:0]);
                         next_packet_state = PACKET_STATE_WRITE_DATA;
                     end else begin
@@ -416,7 +416,7 @@ module usb(
                                                                                // guaranteed to greater than next_words_written * 4
                                                                                // because 4 bytes are always written if there
                                                                                // are 4 bytes available
-                        packet_buffer_address = next_words_read_written;
+                        data_buffer_address = next_words_read_written;
                         next_pending_load = 1; // needed because reads from memory are delayed one clock cycle
                                                // (of the module input clock, not a bit time)
                         next_read_write_bits_count = bytes_to_read_write_bit_count(usb_control[9:0] - (next_words_read_written * 4));

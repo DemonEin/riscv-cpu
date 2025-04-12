@@ -40,7 +40,7 @@ struct bConfiguration {
     uint8_t bMaxPower;
 };
 
-extern volatile char usb_packet_buffer[1024];
+extern volatile char usb_data_buffer[1024];
 
 /* bits 0-9: length of data in bytes
  * bits 10-16: address
@@ -83,7 +83,7 @@ static struct bConfiguration configuration = {
  *
  * in an OUT transaction:
  *     usb_control contains the length of the data section
- *     usb_packet_buffer contains the data
+ *     usb_data_buffer contains the data
  *     any write to usb_control clears the interrupt, signals to
  *         the gateware it now owns the data buffer, and causes the gateware
  *         to send a handshake of the type specified by usb_control
@@ -91,7 +91,7 @@ static struct bConfiguration configuration = {
  * in an IN transaction:
  *     any write to usb_control clears the interrupt and causes the
  *         gateware to send the numbers of bytes specified by usb_control
- *        in usb_packet_buffer in a data packet
+ *        in usb_data_buffer in a data packet
  */
 static uint32_t make_usb_response(const uint32_t usb_control_copy) {
     if (((usb_control_copy >> 10) & 0x7f) != device_address) {
@@ -100,7 +100,7 @@ static uint32_t make_usb_response(const uint32_t usb_control_copy) {
 
     switch ((usb_control_copy >> 21) & 0b11) {
         case 0b11: // setup
-            struct setup_data* setup_data = (struct setup_data*) usb_packet_buffer;
+            struct setup_data* setup_data = (struct setup_data*) usb_data_buffer;
             switch (setup_data->bRequest) {
                 case BREQUEST_SET_ADDRESS:
                     device_address = setup_data->wValue;
@@ -108,11 +108,11 @@ static uint32_t make_usb_response(const uint32_t usb_control_copy) {
                     return 0;
                 case BREQUEST_GET_CONFIGURATION:
                     if (device_address == 0) { // device is in address state
-                        usb_packet_buffer[0] = 0;
+                        usb_data_buffer[0] = 0;
                         return 1;
                     } else {
                         // device is in configured state
-                        *(struct bConfiguration*) usb_packet_buffer = configuration;
+                        *(struct bConfiguration*) usb_data_buffer = configuration;
                         return sizeof(configuration);
                     }
                 /*

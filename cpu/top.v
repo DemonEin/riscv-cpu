@@ -6,9 +6,9 @@ localparam ADDRESS_MTIMECMP = ADDRESS_MTIMEH + 4;
 localparam ADDRESS_MTIMECMPH = ADDRESS_MTIMECMP + 4;
 localparam ADDRESS_LED = 32'h80000010;
 localparam ADDRESS_USB_CONTROL = 32'h80000014;
-localparam ADDRESS_USB_PACKET_BUFFER = 32'hc0000000;
+localparam ADDRESS_USB_DATA_BUFFER = 32'hc0000000;
 
-localparam USB_PACKET_BUFFER_SIZE = 1024; // in bytes
+localparam USB_DATA_BUFFER_SIZE = 1024; // in bytes
 
 module top(
     input clk48,
@@ -33,34 +33,34 @@ module top(
     // wires for module output
     wire [31:0] memory_address,
         unshifted_memory_write_value,
-        usb_packet_buffer_read_value,
-        usb_module_usb_packet_buffer_write_value,
+        usb_data_buffer_read_value,
+        usb_module_usb_data_buffer_write_value,
         next_program_counter;
     wire [2:0] unshifted_memory_write_sections;
-    wire [$clog2(USB_PACKET_BUFFER_SIZE/4) - 1:0] usb_packet_buffer_address;
-    wire write_to_usb_packet_buffer;
+    wire [$clog2(USB_DATA_BUFFER_SIZE/4) - 1:0] usb_data_buffer_address;
+    wire write_to_usb_data_buffer;
     wire handled_usb_packet;
     wire got_usb_packet;
     wire [31:0] usb_usb_control;
 
     core core(clk24, next_program_counter, program_memory_value, memory_address, unshifted_memory_write_value, unshifted_memory_write_sections, memory_read_value, usb_packet_ready, handled_usb_packet, mip_mtip);
-    usb usb(clk48, usb_d_p, usb_d_n, usb_pullup, got_usb_packet, usb_packet_buffer_address, usb_packet_buffer_read_value, usb_module_usb_packet_buffer_write_value, write_to_usb_packet_buffer, usb_packet_ready, usb_control, usb_usb_control);
+    usb usb(clk48, usb_d_p, usb_d_n, usb_pullup, got_usb_packet, usb_data_buffer_address, usb_data_buffer_read_value, usb_module_usb_data_buffer_write_value, write_to_usb_data_buffer, usb_packet_ready, usb_control, usb_usb_control);
 
     // continuously assigned wires
-    wire [3:0] usb_packet_buffer_write_sections = addressing_usb_packet_buffer ? memory_write_sections : write_to_usb_packet_buffer ? 4'b1111 : 0;
+    wire [3:0] usb_data_buffer_write_sections = addressing_usb_data_buffer ? memory_write_sections : write_to_usb_data_buffer ? 4'b1111 : 0;
     wire [3:0] memory_write_sections = { {2{unshifted_memory_write_sections[2]}}, unshifted_memory_write_sections[1:0] } << memory_address[1:0];
 
     wire [31:0] unshifted_memory_read_value = read_memory_mapped_register ? memory_mapped_register_read_value : block_ram_read_value;
     // these shifts work due to requiring natural alignment of memory accesses
     wire [31:0] memory_read_value = unshifted_memory_read_value >> (pending_read_shift * 8);
     wire [31:0] memory_write_value = unshifted_memory_write_value << (memory_address[1:0] * 8);
-    wire [31:0] usb_packet_buffer_write_value = addressing_usb_packet_buffer ? memory_write_value : usb_module_usb_packet_buffer_write_value;
+    wire [31:0] usb_data_buffer_write_value = addressing_usb_data_buffer ? memory_write_value : usb_module_usb_data_buffer_write_value;
 
-    wire addressing_usb_packet_buffer = memory_address >= ADDRESS_USB_PACKET_BUFFER && memory_address < (ADDRESS_USB_PACKET_BUFFER + USB_PACKET_BUFFER_SIZE);
+    wire addressing_usb_data_buffer = memory_address >= ADDRESS_USB_DATA_BUFFER && memory_address < (ADDRESS_USB_DATA_BUFFER + USB_DATA_BUFFER_SIZE);
     // needed because of parsing errors that happen only in yosys when I do
     // either of these inline
-    wire [31:0] usb_address_base = (memory_address - ADDRESS_USB_PACKET_BUFFER);
-    wire [7:0] usb_address = addressing_usb_packet_buffer ? usb_address_base[9:2] : usb_packet_buffer_address;
+    wire [31:0] usb_address_base = (memory_address - ADDRESS_USB_DATA_BUFFER);
+    wire [7:0] usb_address = addressing_usb_data_buffer ? usb_address_base[9:2] : usb_data_buffer_address;
 
     wire mip_mtip = mtime >= mtimecmp;
 
@@ -108,9 +108,9 @@ module top(
                 read_memory_mapped_register <= 1;
             end
             default: begin
-                if (addressing_usb_packet_buffer) begin
+                if (addressing_usb_data_buffer) begin
                     // the usb packet buffer isn't a register but whatever
-                    memory_mapped_register_read_value <= usb_packet_buffer[memory_address[9:2]];
+                    memory_mapped_register_read_value <= usb_data_buffer[memory_address[9:2]];
                     read_memory_mapped_register <= 1;
                 end else begin
                     memory_mapped_register_read_value <= 32'bx;
@@ -204,23 +204,23 @@ module top(
     end
 
     // stateful regs written in the following block
-    reg [31:0] usb_packet_buffer[USB_PACKET_BUFFER_SIZE / 4];
+    reg [31:0] usb_data_buffer[USB_DATA_BUFFER_SIZE / 4];
     reg usb_packet_ready = 0; // 1 means the core owns the buffer, 0 means the usb
                               // module owns the buffer
     reg [31:0] usb_control;
 
     always @(posedge clk48) begin
-        if (usb_packet_buffer_write_sections[0]) begin
-            usb_packet_buffer[usb_address][7:0] <= usb_packet_buffer_write_value[7:0];
+        if (usb_data_buffer_write_sections[0]) begin
+            usb_data_buffer[usb_address][7:0] <= usb_data_buffer_write_value[7:0];
         end
-        if (usb_packet_buffer_write_sections[1]) begin
-            usb_packet_buffer[usb_address][15:8] <= usb_packet_buffer_write_value[15:8];
+        if (usb_data_buffer_write_sections[1]) begin
+            usb_data_buffer[usb_address][15:8] <= usb_data_buffer_write_value[15:8];
         end
-        if (usb_packet_buffer_write_sections[2]) begin
-            usb_packet_buffer[usb_address][23:16] <= usb_packet_buffer_write_value[23:16];
+        if (usb_data_buffer_write_sections[2]) begin
+            usb_data_buffer[usb_address][23:16] <= usb_data_buffer_write_value[23:16];
         end
-        if (usb_packet_buffer_write_sections[3]) begin
-            usb_packet_buffer[usb_address][31:24] <= usb_packet_buffer_write_value[31:24];
+        if (usb_data_buffer_write_sections[3]) begin
+            usb_data_buffer[usb_address][31:24] <= usb_data_buffer_write_value[31:24];
         end
 
         if (got_usb_packet) begin
