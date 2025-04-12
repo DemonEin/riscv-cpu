@@ -177,7 +177,7 @@ module usb(
     localparam PACKET_STATE_WRITE_DATA_PID = 4;
     localparam PACKET_STATE_AWAIT_END_OF_PACKET = 5;
     localparam PACKET_STATE_SYNCING = 6;
-    localparam PACKET_STATE_WRITE_PID = 7;
+    localparam PACKET_STATE_WRITE_HANDSHAKE = 7;
     localparam PACKET_STATE_READING_PID = 8;
     localparam PACKET_STATE_READING_TOKEN = 9;
     localparam PACKET_STATE_READING_DATA = 10;
@@ -188,9 +188,8 @@ module usb(
     localparam PACKET_STATE_WRITE_FINISH = 15;
 
     localparam PENDING_SEND_NONE = 0;
-    localparam PENDING_SEND_ACK = 1;
-    localparam PENDING_SEND_NAK = 2;
-    localparam PENDING_SEND_DATA = 3;
+    localparam PENDING_SEND_HANDSHAKE = 1;
+    localparam PENDING_SEND_DATA = 2;
 
     localparam TRANSACTION_STATE_IDLE = 0;
     localparam TRANSACTION_STATE_AWAIT_DATA = 1;
@@ -229,6 +228,7 @@ module usb(
 
     wire read_complete = read_write_bits_count == 1;
     wire write_complete = read_write_bits_count == 1;
+    wire [3:0] usb_control_handshake_pid = { usb_control[22:21], 2'b01 };
 
     task got_bit();
         next_send_eop = 0;
@@ -337,17 +337,16 @@ module usb(
                     // read_write_bits_count - 1 is the number of bits that would still need to be read to get a whole word
                     data_buffer_write_value = read_bits >> (read_write_bits_count - 1);
                     data_buffer_address = words_read_written;
+                    write_to_data_buffer = 1;
                     // 33 - read_write_bits_count is the number of bits that have been read on this word
                     // need to set all of it here
                     set_usb_control_data_length = (words_read_written * 4) + ((33 - { 4'b0, read_write_bits_count }) / 8);
                     set_usb_control_address = current_transaction_address;
                     set_usb_control_endpoint = current_transaction_endpoint;
                     set_usb_control_token = current_transaction_pid[3:2];
-                    write_to_data_buffer = 1;
                     got_usb_packet = 1;
-                    next_pending_send = PENDING_SEND_ACK;
+                    next_pending_send = PENDING_SEND_HANDSHAKE;
                     next_packet_state = PACKET_STATE_FINISH;
-                    next_transaction_state = TRANSACTION_STATE_IDLE;
                 end else if (read_complete) begin
                     data_buffer_write_value = read_bits;
                     next_words_read_written = words_read_written + 1;
@@ -370,36 +369,26 @@ module usb(
                 end
             end
             PACKET_STATE_WRITE_PAUSE: begin
-                if (pending_send == PENDING_SEND_DATA) begin
-                    if (!usb_packet_ready) begin
-                        start_write();
-                    end
-                end else begin
-                    if (stall_counter == 0) begin
-                        start_write();
-                    end
+                if (!usb_packet_ready) begin
+                    next_consecutive_nzri_data_ones = 0;
+                    next_write_enable = 1;
+                    next_packet_state = PACKET_STATE_WRITE_SYNC;
+                    next_read_write_bits_count = 8;
+                    next_read_write_buffer[7:0] = DECODED_SYNC_PATTERN;
                 end
             end
             PACKET_STATE_WRITE_SYNC: begin
                 if (write_complete) begin
                     case (pending_send)
-                        PENDING_SEND_ACK: begin
+                        PENDING_SEND_HANDSHAKE: begin
                             next_read_write_bits_count = 8;
-                            next_read_write_buffer[7:0] = { ~PID_ACK, PID_ACK };
-                            next_packet_state = PACKET_STATE_WRITE_PID;
+                            next_read_write_buffer[7:0] = { ~usb_control_handshake_pid, usb_control_handshake_pid };
+                            next_packet_state = PACKET_STATE_WRITE_HANDSHAKE;
                         end
                         PENDING_SEND_DATA: begin
-                            if (!usb_packet_ready) begin
-                                // the core has passed ownership of the buffer back
-                                // to the usb module, indicating it is done
-                                next_read_write_bits_count = 8;
-                                next_read_write_buffer[7:0] = { ~PID_DATA0, PID_DATA0 }; // TODO toggle pid
-                                next_packet_state = PACKET_STATE_WRITE_DATA_PID;
-                            end else begin
-                                next_read_write_bits_count = 8;
-                                next_read_write_buffer[7:0] = { ~PID_NAK, PID_NAK };
-                                next_packet_state = PACKET_STATE_WRITE_PID;
-                            end
+                            next_read_write_bits_count = 8;
+                            next_read_write_buffer[7:0] = { ~PID_DATA0, PID_DATA0 }; // TODO toggle pid
+                            next_packet_state = PACKET_STATE_WRITE_DATA_PID;
                         end
                         default: begin
                             // for now
@@ -412,8 +401,9 @@ module usb(
                     next_pending_send = PENDING_SEND_NONE;
                 end
             end
-            PACKET_STATE_WRITE_PID: begin
+            PACKET_STATE_WRITE_HANDSHAKE: begin
                 if (write_complete) begin
+                    next_transaction_state = TRANSACTION_STATE_IDLE;
                     next_send_eop = 1;
                     next_packet_state = PACKET_STATE_SEND_EOP;
                 end
@@ -464,14 +454,6 @@ module usb(
                 next_top_state = TOP_STATE_IDLE;
             end
         endcase
-    endtask
-
-    task start_write();
-        next_consecutive_nzri_data_ones = 0;
-        next_write_enable = 1;
-        next_packet_state = PACKET_STATE_WRITE_SYNC;
-        next_read_write_bits_count = 8;
-        next_read_write_buffer[7:0] = DECODED_SYNC_PATTERN;
     endtask
 
     always @(posedge clock48) begin
