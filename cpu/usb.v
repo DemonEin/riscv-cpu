@@ -22,7 +22,13 @@ module usb(
     output reg write_to_data_buffer,
     input usb_packet_ready,
     input [31:0] usb_control,
-    output reg [31:0] set_usb_control
+    output wire [31:0] set_usb_control = {
+        9'bx, 
+        set_usb_control_token,
+        set_usb_control_endpoint,
+        set_usb_control_address,
+        set_usb_control_data_length
+    }
 );
     reg [1:0] top_state = TOP_STATE_POWERED;
 
@@ -85,6 +91,12 @@ module usb(
     reg [3:0] next_pending_send;
     reg next_write_enable;
     reg next_send_eop;
+    reg [6:0] next_current_transaction_address;
+    reg [3:0] next_current_transaction_endpoint;
+    reg [9:0] set_usb_control_data_length;
+    reg [6:0] set_usb_control_address;
+    reg [3:0] set_usb_control_endpoint;
+    reg [1:0] set_usb_control_token;
 
     always @* begin
         next_top_state = top_state;
@@ -102,12 +114,17 @@ module usb(
         next_pending_send = pending_send;
         next_write_enable = write_enable;
         next_send_eop = send_eop;
+        next_current_transaction_address = current_transaction_address;
+        next_current_transaction_endpoint = current_transaction_endpoint;
 
         got_usb_packet = 0;
         data_buffer_address = 8'bx;
         data_buffer_write_value = 32'bx;
         write_to_data_buffer = 0;
-        set_usb_control = 32'bx;
+        set_usb_control_data_length = 10'bx;
+        set_usb_control_address = 7'bx;
+        set_usb_control_endpoint = 4'bx;
+        set_usb_control_token = 2'bx;
 
         case (top_state)
             TOP_STATE_POWERED: begin
@@ -202,6 +219,8 @@ module usb(
     localparam PID_NYET = 4'b0110;
 
     reg [3:0] current_transaction_pid = 0;
+    reg [6:0] current_transaction_address;
+    reg [3:0] current_transaction_endpoint;
     reg [3:0] pending_send = PENDING_SEND_NONE;
     reg [3:0] packet_state;
     reg [3:0] transaction_state = TRANSACTION_STATE_IDLE;
@@ -292,6 +311,9 @@ module usb(
             end
             PACKET_STATE_READING_TOKEN: begin
                 if (read_complete) begin
+                    next_current_transaction_address = read_bits[22:16];
+                    next_current_transaction_endpoint = read_bits[26:23];
+
                     if (current_transaction_pid == PID_OUT || current_transaction_pid == PID_SETUP) begin
                         next_transaction_state = TRANSACTION_STATE_AWAIT_DATA;
                         next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET; // TODO ignore if not receiving EOP immediately?
@@ -299,7 +321,9 @@ module usb(
                         got_usb_packet = 1;
                         next_pending_send = PENDING_SEND_DATA;
                         next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
-                        set_usb_control[22:10] = { read_bits[26:16],  current_transaction_pid[3:2] };
+                        set_usb_control_address = next_current_transaction_address;
+                        set_usb_control_endpoint = next_current_transaction_endpoint;
+                        set_usb_control_token = current_transaction_pid[3:2];
                     end else begin
                         // this is an internal error, should never happen
                         `ifdef simulation
@@ -310,12 +334,15 @@ module usb(
             end
             PACKET_STATE_READING_DATA: begin
                 if (se0) begin
-                    next_packet_state = PACKET_STATE_FINISH;
                     // read_write_bits_count - 1 is the number of bits that would still need to be read to get a whole word
                     data_buffer_write_value = read_bits >> (read_write_bits_count - 1);
                     data_buffer_address = words_read_written;
                     // 33 - read_write_bits_count is the number of bits that have been read on this word
-                    set_usb_control[9:0] = (words_read_written * 4) + ((33 - { 4'b0, read_write_bits_count }) / 8);
+                    // need to set all of it here
+                    set_usb_control_data_length = (words_read_written * 4) + ((33 - { 4'b0, read_write_bits_count }) / 8);
+                    set_usb_control_address = current_transaction_address;
+                    set_usb_control_endpoint = current_transaction_endpoint;
+                    set_usb_control_token = current_transaction_pid[3:2];
                     write_to_data_buffer = 1;
                     got_usb_packet = 1;
                     next_pending_send = PENDING_SEND_ACK;
@@ -463,6 +490,8 @@ module usb(
         write_enable <= next_write_enable;
         send_eop <= next_send_eop;
         words_read_written <= next_words_read_written;
+        current_transaction_address <= next_current_transaction_address;
+        current_transaction_endpoint <= next_current_transaction_endpoint;
 
         if (se0) begin
             reset_counter <= reset_counter + 1;
