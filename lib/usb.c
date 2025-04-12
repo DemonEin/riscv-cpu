@@ -40,6 +40,18 @@ struct bConfiguration {
     uint8_t bMaxPower;
 };
 
+enum token {
+    TOKEN_OUT = 0b00,
+    TOKEN_IN = 0b10,
+    TOKEN_SETUP = 0b11,
+};
+
+enum handshake {
+    HANDSHAKE_ACK = 0b00,
+    HANDSHAKE_NAK = 0b10,
+    HANDSHAKE_STALL = 0b11,
+};
+
 extern volatile uint8_t usb_data_buffer[1023];
 
 /* bits 0-9: length of data in bytes
@@ -63,7 +75,16 @@ extern volatile uint8_t usb_data_buffer[1023];
  */
 extern volatile uint32_t usb_control;
 
-static bool in_control_transfer = false;
+static enum control_transfer_state {
+    CONTROL_TRANSFER_STATE_NONE,
+    CONTROL_TRANSFER_STATE_IN,
+    CONTROL_TRANSFER_STATE_OUT,
+    CONTROL_TRANSFER_STATE_SET_ADDRESS,n
+} control_transfer_state;
+
+static bool has_pending_device_address = false;
+static uint8_t pending_device_address;
+
 static uint8_t device_address = 0;
 static struct bConfiguration configuration = {
     sizeof(configuration),
@@ -75,6 +96,60 @@ static struct bConfiguration configuration = {
     0b10000000,
     0 // TODO come up with a real number for this
 };
+
+struct data_response {
+    bool ignore;
+    enum handshake handshake;
+};
+
+static struct data_response handle_setup_transaction(uint16_t data_length) {
+    if (data_length != 8) {
+        simulation_print("got bad number of bytes for setup transaction");
+        return (struct data_response) { true, 0 };
+    }
+
+    struct setup_data* setup_data = (struct setup_data*) usb_data_buffer;
+
+    control_transfer_state = (setup_data->bmRequestType & (1 << 7))
+            ? CONTROL_TRANSFER_STATE_IN
+            : CONTROL_TRANSFER_STATE_OUT;
+
+    switch (setup_data->bRequest) {
+        case BREQUEST_SET_ADDRESS:
+            pending_device_address = setup_data->wValue;
+            has_pending_device_address = true;
+            simulation_print("got set address packet");
+            return (struct data_response) { false, HANDSHAKE_ACK };
+        case BREQUEST_GET_CONFIGURATION:
+            break;
+    }
+
+    control_transfer_state = CONTROL_TRANSFER_STATE_NONE;
+    return (struct data_response) { true, 0 };
+}
+
+static struct data_response handle_out_transaction(uint16_t data_length) {
+    return (struct data_response) { true, 0 };
+}
+
+// returns the number of bytes to send from usb_data_buffer
+static uint16_t handle_in_transaction() {
+    simulation_print("handle_in_transaction");
+    if (control_transfer_state == CONTROL_TRANSFER_STATE_OUT) {
+        // this is the status stage of the control transfer
+
+        // needed because setting the address needs to be delayed until the status stage
+        if (has_pending_device_address) {
+            device_address = pending_device_address;
+            has_pending_device_address = false;
+        }
+
+        control_transfer_state = CONTROL_TRANSFER_STATE_NONE;
+        return 0;
+    }
+
+    return 0;
+}
 
 /* an usb external interrupt is triggered when receiving the data packet of an OUT transaction
  * and the token packet of an IN transaction
@@ -95,49 +170,27 @@ static struct bConfiguration configuration = {
  */
 static uint32_t make_usb_response(const uint32_t usb_control_copy) {
     if (((usb_control_copy >> 10) & 0x7f) != device_address) {
+        simulation_print("ignoring due to address");
         return USB_CONTROL_IGNORE;
     }
 
-    switch ((usb_control_copy >> 21) & 0b11) {
-        case 0b11: // setup
-            struct setup_data* setup_data = (struct setup_data*) usb_data_buffer;
-            switch (setup_data->bRequest) {
-                case BREQUEST_SET_ADDRESS:
-                    device_address = setup_data->wValue;
-                    simulation_print("got set address packet");
-                    return 0;
-                case BREQUEST_GET_CONFIGURATION:
-                    if (device_address == 0) { // device is in address state
-                        usb_data_buffer[0] = 0;
-                        return 1;
-                    } else {
-                        // device is in configured state
-                        *(struct bConfiguration*) usb_data_buffer = configuration;
-                        return sizeof(configuration);
-                    }
-                /*
-                case BREQUEST_GET_INTERFACE: // device to host (read) transaction
-                                             // send request error by sending stall
-                                             // so I need a way to control whether the
-                                             // usb module should respond with STALL or ACK
-                                             // in the handshake of an out transaction
-                    // always send request error
-                */
-            }
-            break;
-        case 0b00: // out
+    const unsigned int token = usb_control_copy >> 21 & 0b11;
+    if (token == TOKEN_SETUP || token == TOKEN_OUT) {
+        const uint16_t data_length = usb_control_copy & 0x3ff;
+        const struct data_response data_response = token == TOKEN_SETUP
+                ? handle_setup_transaction(data_length)
+                : handle_out_transaction(data_length);
+        if (data_response.ignore) {
             return USB_CONTROL_IGNORE;
-            break;
-        case 0b10: // in
-            return USB_CONTROL_IGNORE;
-            break;
-        default:
-            simulation_print("invalid token bits");
-            return USB_CONTROL_IGNORE;
+        } else {
+            return data_response.handshake << 21;
+        }
+    } else if (token == TOKEN_IN) {
+        return handle_in_transaction();
+    } else {
+        simulation_print("invalid token bits");
+        return USB_CONTROL_IGNORE;
     }
-
-    simulation_print("did not return earlier");
-    return USB_CONTROL_IGNORE;
 }
 
 void handle_usb_transaction() {
