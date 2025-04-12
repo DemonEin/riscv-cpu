@@ -1,29 +1,31 @@
 #include "cpulib.h"
 
-#define BREQUEST_GET_STATUS 0
-#define BREQUEST_CLEAR_FEATURE 1
-#define BREQUEST_SET_FEATURE 3
-#define BREQUEST_SET_ADDRESS 5
-#define BREQUEST_GET_DESCRIPTOR 6
-#define BREQUEST_SET_DESCRIPTOR 7
-#define BREQUEST_GET_CONFIGURATION 8
-#define BREQUEST_SET_CONFIGURATION 9
-#define BREQUEST_GET_INTERFACE 10
-#define BREQUEST_SET_INTERFACE 11
-#define BREQUEST_SYNCH_FRAME 12
+enum bRequest : uint8_t {
+    BREQUEST_GET_STATUS = 0,
+    BREQUEST_CLEAR_FEATURE = 1,
+    BREQUEST_SET_FEATURE = 3,
+    BREQUEST_SET_ADDRESS = 5,
+    BREQUEST_GET_DESCRIPTOR = 6,
+    BREQUEST_SET_DESCRIPTOR = 7,
+    BREQUEST_GET_CONFIGURATION = 8,
+    BREQUEST_SET_CONFIGURATION = 9,
+    BREQUEST_GET_INTERFACE = 10,
+    BREQUEST_SET_INTERFACE = 11,
+    BREQUEST_SYNCH_FRAME = 12,
+};
 
-#define DESCRIPTOR_TYPE_DEVICE 1
-#define DESCRIPTOR_TYPE_CONFIGURATION 2
-#define DESCRIPTOR_TYPE_STRING 3
-#define DESCRIPTOR_TYPE_INTERFACE 4
-#define DESCRIPTOR_TYPE_ENDPOINT 5
-#define DESCRIPTOR_TYPE_DEVICE_QUALIFIER 6
-
-#define USB_CONTROL_IGNORE (1 << 23)
+enum bDescriptorType : uint8_t {
+    DESCRIPTOR_TYPE_DEVICE = 1,
+    DESCRIPTOR_TYPE_CONFIGURATION = 2,
+    DESCRIPTOR_TYPE_STRING = 3,
+    DESCRIPTOR_TYPE_INTERFACE = 4,
+    DESCRIPTOR_TYPE_ENDPOINT = 5,
+    DESCRIPTOR_TYPE_DEVICE_QUALIFIER = 6,
+};
 
 struct setup_data {
     uint8_t bmRequestType;
-    uint8_t bRequest;
+    enum bRequest bRequest;
     uint16_t wValue;
     uint16_t wIndex;
     uint16_t wLength;
@@ -31,7 +33,7 @@ struct setup_data {
 
 struct bConfiguration {
     uint8_t bLength;
-    uint8_t bDescriptorType;
+    enum bDescriptorType bDescriptorType;
     uint16_t wTotalLength;
     uint8_t bNumInterfaces;
     uint8_t bConfigurationValue;
@@ -79,7 +81,7 @@ static enum control_transfer_state {
     CONTROL_TRANSFER_STATE_NONE,
     CONTROL_TRANSFER_STATE_IN,
     CONTROL_TRANSFER_STATE_OUT,
-    CONTROL_TRANSFER_STATE_SET_ADDRESS,n
+    CONTROL_TRANSFER_STATE_SET_ADDRESS,
 } control_transfer_state;
 
 static bool has_pending_device_address = false;
@@ -168,6 +170,8 @@ static uint16_t handle_in_transaction() {
  *         gateware to send the numbers of bytes specified by usb_control
  *        in usb_data_buffer in a data packet
  */
+#define USB_CONTROL_IGNORE (1 << 23)
+
 static uint32_t make_usb_response(const uint32_t usb_control_copy) {
     if (((usb_control_copy >> 10) & 0x7f) != device_address) {
         simulation_print("ignoring due to address");
