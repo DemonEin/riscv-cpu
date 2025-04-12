@@ -369,12 +369,18 @@ module usb(
                 end
             end
             PACKET_STATE_WRITE_PAUSE: begin
-                if (!usb_packet_ready) begin
-                    next_consecutive_nzri_data_ones = 0;
-                    next_write_enable = 1;
-                    next_packet_state = PACKET_STATE_WRITE_SYNC;
-                    next_read_write_bits_count = 8;
-                    next_read_write_buffer[7:0] = DECODED_SYNC_PATTERN;
+                if (!usb_packet_ready) begin // usb_packet_ready is set to zero when the software
+                                             // has handled the transaction
+                    if (!usb_control[23]) begin // usb_control[23] is whether to ignore the transaction
+                        next_consecutive_nzri_data_ones = 0;
+                        next_write_enable = 1;
+                        next_packet_state = PACKET_STATE_WRITE_SYNC;
+                        next_read_write_bits_count = 8;
+                        next_read_write_buffer[7:0] = DECODED_SYNC_PATTERN;
+                    end else begin
+                        next_top_state = TOP_STATE_IDLE;
+                        next_transaction_state = TRANSACTION_STATE_IDLE;
+                    end
                 end
             end
             PACKET_STATE_WRITE_SYNC: begin
