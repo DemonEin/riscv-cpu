@@ -40,7 +40,7 @@ struct bConfiguration {
     uint8_t bMaxPower;
 };
 
-extern volatile char usb_data_buffer[1024];
+extern volatile uint8_t usb_data_buffer[1023];
 
 /* bits 0-9: length of data in bytes
  * bits 10-16: address

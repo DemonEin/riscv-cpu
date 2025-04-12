@@ -8,7 +8,7 @@ localparam ADDRESS_LED = 32'h80000010;
 localparam ADDRESS_USB_CONTROL = 32'h80000014;
 localparam ADDRESS_USB_DATA_BUFFER = 32'hc0000000;
 
-localparam USB_DATA_BUFFER_SIZE = 1024; // in bytes
+localparam USB_DATA_BUFFER_SIZE = 1023; // in bytes
 
 module top(
     input clk48,
