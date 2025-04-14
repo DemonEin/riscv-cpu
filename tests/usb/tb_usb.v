@@ -13,7 +13,7 @@ module tb_usb();
     tri0 data_n_wire = write_enable ? output_data_n : 1'bz;
     wire end_of_packet = !data_wire && !data_n_wire;
 
-    reg [7:0] data_list[1024];
+    reg [7:0] data_list[1023];
     reg [12:0] data_index = 0;
 
     reg clock48;
@@ -83,7 +83,7 @@ module tb_usb();
         input [15:0] wValue,
         input [15:0] wIndex,
         input [15:0] wLength,
-        input [7:0] data_data[1024]
+        input [7:0] data_data[1023]
     );
         do_setup_transaction(
             bmRequestType,
@@ -113,7 +113,7 @@ module tb_usb();
         end
     endtask
 
-    task do_bulk_out_transaction(input [7:0] transaction_data[1024], input [31:0] byte_count, input [3:0] data_pid);
+    task do_bulk_out_transaction(input [7:0] transaction_data[1023], input [31:0] byte_count, input [3:0] data_pid);
         send_token_packet(PID_OUT);
         data_list = transaction_data;
         send_data_packet(data_pid, byte_count);
