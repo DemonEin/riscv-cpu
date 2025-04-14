@@ -145,11 +145,6 @@ module usb(
             end
             TOP_STATE_ACTIVE: begin
                 if (read_write_clock_counter == 3) begin
-                    if (!skip_bit) begin
-                        next_read_write_buffer = read_bits;
-                        got_bit();
-                    end
-
                     if (stall_counter > 0) begin
                         next_stall_counter = stall_counter - 1;
                     end
@@ -161,6 +156,13 @@ module usb(
                     end
 
                     next_previous_data = data;
+
+                    if (!skip_bit) begin
+                        next_read_write_buffer = read_bits;
+                        // run got_bit after everything else to allow it
+                        // to override other values
+                        got_bit();
+                    end
                 end
 
                 if (pending_load) begin
