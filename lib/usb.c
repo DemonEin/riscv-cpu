@@ -132,7 +132,7 @@ static uint16_t handle_in_transaction() {
     if ((setup_data.bmRequestType & (1 << 7)) == 0x80) { // 0 is host-to-device, 1 is device-to-host
         // this is a data stage of an in control transfer
         switch (setup_data.bRequest) {
-            BREQUEST_GET_CONFIGURATION:
+            case BREQUEST_GET_CONFIGURATION:
                 usb_data_buffer[0] = configuration.bConfigurationValue;
                 return 1;
             default:

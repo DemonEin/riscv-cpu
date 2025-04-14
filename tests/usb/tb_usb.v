@@ -64,6 +64,7 @@ module tb_usb();
             data_list,
             data_list_length
         );
+        if (data_list_length != 1) $stop;
         #10ms
 
         $finish;
