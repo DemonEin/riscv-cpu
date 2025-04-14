@@ -14,7 +14,7 @@ module tb_usb();
     wire end_of_packet = !data_wire && !data_n_wire;
 
     reg [7:0] data_list[1023];
-    reg [12:0] data_index = 0;
+    reg [31:0] data_list_length;
 
     reg clock48;
 
@@ -61,7 +61,8 @@ module tb_usb();
             0,
             0,
             1,
-            data_list
+            data_list,
+            data_list_length
         );
         #10ms
 
@@ -73,7 +74,7 @@ module tb_usb();
     end
 
     task set_device_address(input [6:0] address);
-        do_control_transfer(0, BREQUEST_SET_ADDRESS, { 9'b0, address }, 0, 0, data_list);
+        do_control_transfer(0, BREQUEST_SET_ADDRESS, { 9'b0, address }, 0, 0, data_list, data_list_length);
         test_device_address = address;
     endtask
 
@@ -83,7 +84,8 @@ module tb_usb();
         input [15:0] wValue,
         input [15:0] wIndex,
         input [15:0] wLength,
-        input [7:0] data_data[1023]
+        inout [7:0] data[1023],
+        output [31:0] byte_count, // only used for IN/read transfers
     );
         do_setup_transaction(
             bmRequestType,
@@ -95,37 +97,37 @@ module tb_usb();
 
         if (bmRequestType[7] == 1) begin
             // control read transfer
-            do_bulk_in_transaction();
+            do_bulk_in_transaction(data, byte_count);
 
             // status stage
-            do_bulk_out_transaction(data_list, 0, PID_DATA1);
+            do_bulk_out_transaction(data, 0, PID_DATA1);
         end else begin
             // control write transfer
             if (wLength > 0) begin
-                do_bulk_out_transaction(data_data, { 16'b0, wLength }, PID_DATA0);  // TODO toggle DATA0/DATA1
+                do_bulk_out_transaction(data, { 16'b0, wLength }, PID_DATA0);  // TODO toggle DATA0/DATA1
             end
 
             // status stage
-            do_bulk_in_transaction();
-            if (received_bit_count > 8) begin // received_bit_count includes the pid
+            do_bulk_in_transaction(data, byte_count); // the data and byte_count outputs here are unused
+            if (byte_count != 0) begin
                 $stop("received data packet non-zero size");
             end
         end
     endtask
 
-    task do_bulk_out_transaction(input [7:0] transaction_data[1023], input [31:0] byte_count, input [3:0] data_pid);
+    task do_bulk_out_transaction(input [7:0] data[1023], input [31:0] byte_count, input [3:0] data_pid);
         send_token_packet(PID_OUT);
-        data_list = transaction_data;
-        send_data_packet(data_pid, byte_count);
-        assert_receive_ack();
+        send_data_packet(data_pid, data, byte_count);
+        receive_ack();
     endtask
 
-    task do_bulk_in_transaction();
+    task do_bulk_in_transaction(output [7:0] data[1023], output [31:0] byte_count);
         send_token_packet(PID_IN);
-        assert_receive_data(PID_DATA0); // TODO toggle DATA0/DATA1
+        receive_data(PID_DATA0, data, byte_count); // TODO toggle DATA0/DATA1
         send_token_packet(PID_ACK);
     endtask
 
+    reg [7:0] do_setup_transaction_data[1023];
     task do_setup_transaction(
         input [7:0] bmRequestType,
         input [7:0] bRequest,
@@ -134,59 +136,71 @@ module tb_usb();
         input [15:0] wLength
     );
         send_token_packet(PID_SETUP);
-        data_list[0] = bmRequestType;
-        data_list[1] = bRequest;
-        data_list[2] = wValue[7:0];
-        data_list[3] = wValue[15:8];
-        data_list[4] = wIndex[7:0];
-        data_list[5] = wIndex[15:8];
-        data_list[6] = wLength[7:0];
-        data_list[7] = wLength[15:8];
-        send_data_packet(PID_DATA0, 8);
-        assert_receive_ack();
+        do_setup_transaction_data[0] = bmRequestType;
+        do_setup_transaction_data[1] = bRequest;
+        do_setup_transaction_data[2] = wValue[7:0];
+        do_setup_transaction_data[3] = wValue[15:8];
+        do_setup_transaction_data[4] = wIndex[7:0];
+        do_setup_transaction_data[5] = wIndex[15:8];
+        do_setup_transaction_data[6] = wLength[7:0];
+        do_setup_transaction_data[7] = wLength[15:8];
+        send_data_packet(PID_DATA0, do_setup_transaction_data, 8);
+        receive_ack();
     endtask
 
-    task assert_receive_data(input [3:0] pid);
+
+    reg [7:0] receive_data_data[1024];
+    task receive_data(input [3:0] pid, output [7:0] data[1023], output [31:0] byte_count);
         $display("waiting to receive data packet");
-        receive_packet();
-        if (!(received_bit_count >= 8 && data_list[0] == { ~pid, pid })) begin
+        receive_packet(receive_data_data, byte_count);
+        if (!(byte_count > 0 && receive_data_data[0] == { ~pid, pid })) begin
             $stop("did not receive data");
+        end
+
+        byte_count = byte_count - 1;
+        for (reg [31:0] i = 0; i < byte_count; i = i + 1) begin
+            data[i] = receive_data_data[i + 1];
         end
     endtask
 
-    task assert_receive_ack();
+
+    reg [7:0] receive_ack_data[1024];
+    reg [31:0] receive_ack_data_length;
+    task receive_ack();
         $display("waiting to receive ack packet");
-        receive_packet();
-        if (!(received_bit_count == 8 && data_list[0] == { ~PID_ACK, PID_ACK })) begin
+        receive_packet(receive_ack_data, receive_ack_data_length);
+        if (!(receive_ack_data_length == 1 && receive_ack_data[0] == { ~PID_ACK, PID_ACK })) begin
             $display("did not receive ack");
             $stop;
         end
     endtask
 
+    reg [7:0] send_token_packet_data[1024];
     task send_token_packet(input [3:0] pid);
-        data_list[0] = { ~pid, pid };
-        data_list[1] = { test_device_endpoint[0], test_device_address };
-        data_list[2] = { 5'b0, test_device_endpoint[3:1] }; // leave CRC5 as zero for now
-        send_packet(3);
+        send_token_packet_data[0] = { ~pid, pid };
+        send_token_packet_data[1] = { test_device_endpoint[0], test_device_address };
+        send_token_packet_data[2] = { 5'b0, test_device_endpoint[3:1] }; // leave CRC5 as zero for now
+        send_packet(send_token_packet_data, 3);
     endtask
 
-    task send_data_packet(input [3:0] pid, input [31:0] byte_count);
+    reg [7:0] send_data_packet_data [1024];
+    task send_data_packet(input [3:0] pid, input [7:0] data [1023], input [31:0] byte_count);
         for (reg [31:0] i = byte_count; i >= 1; i = i - 1) begin
-            data_list[i] = data_list[i - 1];
+            send_data_packet_data[i] = data[i - 1];
         end
-        data_list[0] = { ~pid, pid };
-        send_packet(byte_count + 1);
+        send_data_packet_data[0] = { ~pid, pid };
+        send_packet(send_data_packet_data, byte_count + 1);
     endtask
 
     task send_handshake_packet(input [3:0] pid);
         data_list[0] = { ~pid, pid };
-        send_packet(1);
+        send_packet(data_list, 1);
     endtask
 
     reg previous_data;
     reg [31:0] consecutive_decoded_ones;
     reg input_bit;
-    task send_packet(input [31:0] byte_count);
+    task send_packet(input [7:0] data[1024], input [31:0] byte_count);
         write_enable = 1;
         // send sync pattern
         for (reg [3:0] i = 0; i < 8; i = i + 1) begin
@@ -200,7 +214,7 @@ module tb_usb();
         consecutive_decoded_ones = 1; // since the sync packet ends with an encoded one
         for (reg [31:0] i = 0; i < byte_count; i = i + 1) begin
             for (reg [7:0] j = 0; j < 8; j = j + 1) begin
-                input_bit = data_list[i][j[2:0]];
+                input_bit = data[i][j[2:0]];
 
                 if (input_bit) begin
                     consecutive_decoded_ones = consecutive_decoded_ones + 1;
@@ -237,7 +251,7 @@ module tb_usb();
     reg [31:0] received_bit_count;
     reg nzri_decoded_bit;
     reg [31:0] receive_timeout;
-    task receive_packet();
+    task receive_packet(output [7:0] data[1024], output[31:0] byte_count);
         // receive sync pattern
         // assume starting in idle or eop state
         receive_timeout = 477707; // 10 milliseconds of FULL_SPEED_PERIOD
@@ -268,7 +282,7 @@ module tb_usb();
             nzri_decoded_bit = !(data_wire ^ previous_data);
 
             if (consecutive_decoded_ones < 6) begin
-                data_list[received_bit_count / 8][received_bit_count % 8] = nzri_decoded_bit;
+                data[received_bit_count / 8][received_bit_count % 8] = nzri_decoded_bit;
                 received_bit_count = received_bit_count + 1;
             end
 
@@ -285,6 +299,12 @@ module tb_usb();
         if (receive_timeout == 0) begin
             $stop;
         end
+
+        if (received_bit_count % 8 != 0) begin
+            $stop;
+        end
+
+        byte_count = received_bit_count / 8;
 
         #FULL_SPEED_PERIOD; // wait once for the second end of packet bit time
 
