@@ -19,14 +19,17 @@ target_directory := $(current_directory)target/$(shell realpath --relative-to $(
 linker_script := $(current_directory)linker-script
 lib := $(current_directory)lib
 cpulib.o := $(current_directory)target/lib/cpulib.o
+ifndef no_link_library
+	cpulib_argument := $(cpulib.o)
+endif
 
 .NOTINTERMEDIATE:
 
 %/verilator/sim: $(testbench) %/memory.hex %/entry.txt $(needed_verilog_files)
 	verilator $(VERILATOR_OPTIONS) +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) +define+MEMORY_FILE=\"$*/memory.hex\" --binary -j 0 $(testbench) -Mdir $(@D) -o $(@F)
 
-%/a.out: $(program_files) $(cpulib.o) $(linker_script) | %
-	$(gcc_binary_prefix)gcc $(GCC_OPTIONS) -I $(current_directory) -T $(linker_script) -nostdlib -o $@ $(program_files) $(cpulib.o)
+%/a.out: $(program_files) $(cpulib_argument) $(linker_script) | %
+	$(gcc_binary_prefix)gcc $(GCC_OPTIONS) -I $(current_directory) -T $(linker_script) -nostdlib -o $@ $(program_files) $(cpulib_argument)
 
 %/memory.bin %/entry.txt &: %/a.out
 	cargo run --manifest-path $(current_directory)loader/Cargo.toml -- \

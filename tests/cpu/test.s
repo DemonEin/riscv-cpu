@@ -11,8 +11,10 @@ scratch:
 .space 128
 
 .align 4
-.global main
-main:
+.global _start
+_start:
+    li sp, 0x1000
+
     lb x1, string + 2
     li x2, 'l'
     bne x1, x2, fail
