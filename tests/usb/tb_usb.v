@@ -55,7 +55,14 @@ module tb_usb();
         #10ms
 
         set_device_address(1);
-
+        do_control_transfer(
+            8'b10000000,
+            BREQUEST_GET_CONFIGURATION,
+            0,
+            0,
+            1,
+            data_list
+        );
         #10ms
 
         $finish;

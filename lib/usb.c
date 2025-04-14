@@ -103,18 +103,43 @@ static struct data_response handle_setup_transaction(uint16_t data_length) {
         return (struct data_response) { true, 0 };
     }
 
+    in_control_transfer = true;
     setup_data = *(volatile struct setup_data*) usb_data_buffer;
     return (struct data_response) { false, HANDSHAKE_ACK };
 }
 
 static struct data_response handle_out_transaction(uint16_t data_length) {
+    if (!in_control_transfer) {
+        return (struct data_response) { false, HANDSHAKE_NAK };
+    }
+
+    if (setup_data.bmRequestType & (1 << 7)) {
+        // in the status stage of an IN control transfer
+        return (struct data_response) { false, HANDSHAKE_ACK };
+    } else {
+        // in the data stage of an OUT control transfer
+    }
     return (struct data_response) { true, 0 };
 }
 
 // returns the number of bytes to send from usb_data_buffer
 static uint16_t handle_in_transaction() {
-    simulation_print("handle_in_transaction");
-    if (in_control_transfer && (setup_data.bmRequestType & (1 << 7))) {
+    if (!in_control_transfer) {
+        // TODO return some kind of bad handshake in the error case
+        return 0;
+    }
+
+    if ((setup_data.bmRequestType & (1 << 7)) == 0x80) { // 0 is host-to-device, 1 is device-to-host
+        // this is a data stage of an in control transfer
+        switch (setup_data.bRequest) {
+            BREQUEST_GET_CONFIGURATION:
+                usb_data_buffer[0] = configuration.bConfigurationValue;
+                return 1;
+            default:
+                // TODO return some kind of bad handshake
+                return 0;
+        }
+    } else {
         // this is the status stage of an out control transfer
 
         // needed because setting the address needs to be delayed until the status stage
@@ -125,8 +150,6 @@ static uint16_t handle_in_transaction() {
         in_control_transfer = false;
         return 0;
     }
-
-    return 0;
 }
 
 /* an usb external interrupt is triggered when receiving the data packet of an OUT transaction
