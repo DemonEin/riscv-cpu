@@ -7,6 +7,10 @@ bad_instruction:
 .4byte 0xFFFFFFFF
 
 .align 4
+scratch:
+.space 128
+
+.align 4
 .global main
 main:
     lb x1, string + 2
@@ -47,7 +51,9 @@ main:
     bne x1, x2, fail
 
     # test non-word-aligned single byte store
-    li t0, 0x101
+    lui t0, %hi(scratch)
+    addi t0, a0, %lo(scratch)
+    addi t0, t0, 1
     li a0, 57
     sb a0, (t0)
     lbu t1, (t0)
