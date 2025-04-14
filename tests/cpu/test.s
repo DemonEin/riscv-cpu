@@ -45,6 +45,11 @@ _start:
     beq x2, x1, fail
     sltiu x2, x0, -1000
     bne x2, x1, fail
+
+    li	a5, 0x80
+    slli a5, a5, 0x18
+    srai a5, a5, 0x18
+    bgez a5, fail
     
     li x1, 1
     li x2, 0
