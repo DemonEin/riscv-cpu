@@ -56,6 +56,7 @@ module usb(
     reg output_data, output_data_n;
     reg send_eop = 0;
     reg pending_load = 0;
+    wire [3:0] current_data_pid = { data_sync_bit, PID_DATA0[2:0] };
 
     always @* begin
         if (send_eop) begin
@@ -97,6 +98,7 @@ module usb(
     reg [6:0] set_usb_control_address;
     reg [3:0] set_usb_control_endpoint;
     reg [1:0] set_usb_control_token;
+    reg next_data_sync_bit;
 
     always @* begin
         next_top_state = top_state;
@@ -116,6 +118,7 @@ module usb(
         next_send_eop = send_eop;
         next_current_transaction_address = current_transaction_address;
         next_current_transaction_endpoint = current_transaction_endpoint;
+        next_data_sync_bit = data_sync_bit;
 
         got_usb_packet = 0;
         data_buffer_address = 8'bx;
@@ -227,6 +230,7 @@ module usb(
     reg [3:0] transaction_state = TRANSACTION_STATE_IDLE;
     reg [3:0] stall_counter;
     reg [7:0] words_read_written;
+    reg data_sync_bit; // TODO implement data sync bit error handling
 
     wire read_complete = read_write_bits_count == 1;
     wire write_complete = read_write_bits_count == 1;
@@ -258,7 +262,7 @@ module usb(
                     if (read_bits[27:24] == ~read_bits[31:28]) begin // check PID check
                         case (transaction_state)
                             TRANSACTION_STATE_AWAIT_DATA: begin
-                                if (read_bits[27:24] == PID_DATA0 || read_bits[27:24] == PID_DATA1) begin // TODO toggle correctly
+                                if (read_bits[27:24] == current_data_pid) begin
                                     next_packet_state = PACKET_STATE_READING_DATA;
                                     next_words_read_written = 0;
                                     next_read_write_bits_count = 32;
@@ -292,6 +296,7 @@ module usb(
                                         $stop;
                                     end
                                 `endif
+                                next_data_sync_bit = !data_sync_bit;
                                 next_transaction_state = TRANSACTION_STATE_IDLE;
                                 next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
                             end
@@ -319,6 +324,10 @@ module usb(
                     if (current_transaction_pid == PID_OUT || current_transaction_pid == PID_SETUP) begin
                         next_transaction_state = TRANSACTION_STATE_AWAIT_DATA;
                         next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET; // TODO ignore if not receiving EOP immediately?
+
+                        if (current_transaction_pid == PID_SETUP) begin
+                            next_data_sync_bit = 0;
+                        end
                     end else if (current_transaction_pid == PID_IN) begin
                         got_usb_packet = 1;
                         next_pending_send = PENDING_SEND_DATA;
@@ -340,6 +349,7 @@ module usb(
                     data_buffer_write_value = read_bits >> (read_write_bits_count - 1);
                     data_buffer_address = words_read_written;
                     write_to_data_buffer = 1;
+                    next_data_sync_bit = !data_sync_bit;
                     // 33 - read_write_bits_count is the number of bits that have been read on this word
                     // need to set all of it here
                     set_usb_control_data_length = (words_read_written * 4) + ((33 - { 4'b0, read_write_bits_count }) / 8);
@@ -395,7 +405,7 @@ module usb(
                         end
                         PENDING_SEND_DATA: begin
                             next_read_write_bits_count = 8;
-                            next_read_write_buffer[7:0] = { ~PID_DATA0, PID_DATA0 }; // TODO toggle pid
+                            next_read_write_buffer[7:0] = { ~current_data_pid, current_data_pid };
                             next_packet_state = PACKET_STATE_WRITE_DATA_PID;
                         end
                         default: begin
@@ -482,6 +492,7 @@ module usb(
         words_read_written <= next_words_read_written;
         current_transaction_address <= next_current_transaction_address;
         current_transaction_endpoint <= next_current_transaction_endpoint;
+        data_sync_bit <= next_data_sync_bit;
 
         if (se0) begin
             reset_counter <= reset_counter + 1;

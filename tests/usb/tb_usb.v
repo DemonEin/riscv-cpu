@@ -12,6 +12,8 @@ module tb_usb();
     tri1 data_wire = write_enable ? output_data : 1'bz;
     tri0 data_n_wire = write_enable ? output_data_n : 1'bz;
     wire end_of_packet = !data_wire && !data_n_wire;
+    reg data_sync_bit = 0;
+    wire [3:0] current_data_pid = { data_sync_bit, PID_DATA0[2:0] };
 
     reg [7:0] data_list[1023];
     reg [31:0] data_list_length;
@@ -118,13 +120,15 @@ module tb_usb();
 
     task do_bulk_out_transaction(input [7:0] data[1023], input [31:0] byte_count, input [3:0] data_pid);
         send_token_packet(PID_OUT);
-        send_data_packet(data_pid, data, byte_count);
+        send_data_packet(current_data_pid, data, byte_count);
         receive_ack();
+        data_sync_bit = !data_sync_bit;
     endtask
 
     task do_bulk_in_transaction(output [7:0] data[1023], output [31:0] byte_count);
         send_token_packet(PID_IN);
-        receive_data(PID_DATA0, data, byte_count); // TODO toggle DATA0/DATA1
+        receive_data(current_data_pid, data, byte_count);
+        data_sync_bit = !data_sync_bit;
         send_token_packet(PID_ACK);
     endtask
 
@@ -146,6 +150,7 @@ module tb_usb();
         do_setup_transaction_data[6] = wLength[7:0];
         do_setup_transaction_data[7] = wLength[15:8];
         send_data_packet(PID_DATA0, do_setup_transaction_data, 8);
+        data_sync_bit = 1;
         receive_ack();
     endtask
 
