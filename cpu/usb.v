@@ -371,8 +371,8 @@ module usb(
                 end
             end
             PACKET_STATE_WRITE_PAUSE: begin
-                if (!usb_packet_ready) begin // usb_packet_ready is set to zero when the software
-                                             // has handled the transaction
+                if (stall_counter == 0 && !usb_packet_ready) begin // usb_packet_ready is set to zero when the software
+                                                                   // has handled the transaction
                     if (!usb_control[23]) begin // usb_control[23] is whether to ignore the transaction
                         next_consecutive_nzri_data_ones = 0;
                         next_write_enable = 1;
