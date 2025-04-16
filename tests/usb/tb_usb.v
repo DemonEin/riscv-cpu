@@ -194,7 +194,7 @@ module tb_usb();
         end
     endtask
 
-    reg [7:0] send_token_packet_data[1024];
+    reg [7:0] send_token_packet_data[1026];
     task send_token_packet(input [3:0] pid);
         send_token_packet_data[0] = { ~pid, pid };
         send_token_packet_data[1] = { test_device_endpoint[0], test_device_address };
@@ -202,13 +202,26 @@ module tb_usb();
         send_packet(send_token_packet_data, 3);
     endtask
 
-    reg [7:0] send_data_packet_data [1024];
+    reg [7:0] send_data_packet_data [1026];
     task send_data_packet(input [3:0] pid, input [7:0] data [1023], input [31:0] byte_count);
         for (reg [31:0] i = byte_count; i >= 1; i = i - 1) begin
             send_data_packet_data[i] = data[i - 1];
         end
         send_data_packet_data[0] = { ~pid, pid };
-        send_packet(send_data_packet_data, byte_count + 1);
+
+        // generate crc, duplicated in receive_data but whatever
+        data_crc = ~0;
+        for (reg [31:0] bit_index = 8; bit_index < (byte_count + 1) * 8; bit_index = bit_index + 1) begin
+            data_crc = data_crc[15] ^ send_data_packet_data[bit_index / 8][bit_index % 8]
+                    ? (data_crc << 1) ^ 16'b1000000000000101
+                    : (data_crc << 1);
+        end
+
+        for (reg [31:0] i = 0; i < 16; i = i + 1) begin
+            send_data_packet_data[byte_count + 1 + (i / 8)][i % 8] = !data_crc[15 - i];
+        end
+
+        send_packet(send_data_packet_data, byte_count + 3);
     endtask
 
     task send_handshake_packet(input [3:0] pid);
@@ -219,7 +232,8 @@ module tb_usb();
     reg previous_data;
     reg [31:0] consecutive_decoded_ones;
     reg input_bit;
-    task send_packet(input [7:0] data[1024], input [31:0] byte_count);
+    task send_packet(input [7:0] data[1026], input [31:0] byte_count);
+        $display("sending %d bytes", byte_count);
         write_enable = 1;
         // send sync pattern
         for (reg [3:0] i = 0; i < 8; i = i + 1) begin

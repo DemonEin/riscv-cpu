@@ -86,7 +86,7 @@ module usb(
     reg [31:0] next_read_write_buffer;
     reg [3:0] next_stall_counter;
     reg next_pending_load;
-    reg [7:0] next_words_read_written;
+    reg [8:0] next_words_read_written;
     reg [3:0] next_transaction_state;
     reg [3:0] next_current_transaction_pid;
     reg [3:0] next_pending_send;
@@ -234,7 +234,7 @@ module usb(
     reg [3:0] packet_state;
     reg [3:0] transaction_state = TRANSACTION_STATE_IDLE;
     reg [3:0] stall_counter;
-    reg [7:0] words_read_written;
+    reg [8:0] words_read_written;
     reg data_sync_bit; // TODO implement data sync bit error handling
     reg [15:0] data_crc;
 
@@ -352,24 +352,43 @@ module usb(
             end
             PACKET_STATE_READING_DATA: begin
                 if (se0) begin
-                    // read_write_bits_count - 1 is the number of bits that would still need to be read to get a whole word
-                    data_buffer_write_value = read_bits >> (read_write_bits_count - 1);
-                    data_buffer_address = words_read_written;
-                    write_to_data_buffer = 1;
-                    next_data_sync_bit = !data_sync_bit;
-                    // 33 - read_write_bits_count is the number of bits that have been read on this word
-                    // need to set all of it here
-                    set_usb_control_data_length = (words_read_written * 4) + ((33 - { 4'b0, read_write_bits_count }) / 8);
-                    set_usb_control_address = current_transaction_address;
-                    set_usb_control_endpoint = current_transaction_endpoint;
-                    set_usb_control_token = current_transaction_pid[3:2];
-                    got_usb_packet = 1;
-                    next_pending_send = PENDING_SEND_HANDSHAKE;
-                    next_packet_state = PACKET_STATE_FINISH;
+                    if (data_crc == 16'b1000000000001101) begin
+                        if (words_read_written < 256) begin
+                            // read_write_bits_count - 1 is the number of bits that would still
+                            // need to be read to get a whole word
+                            data_buffer_write_value = read_bits >> (read_write_bits_count - 1);
+                            data_buffer_address = words_read_written[7:0];
+                            write_to_data_buffer = 1;
+                        end
+                        next_data_sync_bit = !data_sync_bit;
+                        // 33 - read_write_bits_count is the number of bits that have been read on this word
+                        // need to set all of it here
+                        // - 2 because of the two crc bytes
+                        set_usb_control_data_length = (words_read_written * 4) + ((33 - { 4'b0, read_write_bits_count }) / 8) - 2;
+                        set_usb_control_address = current_transaction_address;
+                        set_usb_control_endpoint = current_transaction_endpoint;
+                        set_usb_control_token = current_transaction_pid[3:2];
+                        got_usb_packet = 1;
+                        next_pending_send = PENDING_SEND_HANDSHAKE;
+                        next_packet_state = PACKET_STATE_FINISH;
+                    end else begin
+                        `ifdef simulation
+                            $display("got bad data_crc: 0x%h, words_read_written: %b", data_crc, words_read_written);
+                            $stop;
+                        `else
+                            next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
+                        `endif
+                    end
                 end else if (read_complete) begin
-                    data_buffer_write_value = read_bits;
+                    // words_read_written can be greater than 255 because of the two crc
+                    // bytes after the data payload but these don't need to be written
+                    if (words_read_written < 256) begin
+                        data_buffer_write_value = read_bits;
+                        data_buffer_address = words_read_written[7:0];
+                        write_to_data_buffer = 1;
+                    end
                     next_words_read_written = words_read_written + 1;
-                    write_to_data_buffer = 1;
+                    next_read_write_bits_count = 32;
                 end
             end
             PACKET_STATE_AWAIT_END_OF_PACKET: begin
@@ -460,7 +479,7 @@ module usb(
                                                                                // guaranteed to greater than next_words_written * 4
                                                                                // because 4 bytes are always written if there
                                                                                // are 4 bytes available
-                        data_buffer_address = next_words_read_written;
+                        data_buffer_address = next_words_read_written[7:0];
                         next_pending_load = 1; // needed because reads from memory are delayed one clock cycle
                                                // (of the module input clock, not a bit time)
                         next_read_write_bits_count = bytes_to_read_write_bit_count(usb_control[9:0] - (next_words_read_written * 4));
