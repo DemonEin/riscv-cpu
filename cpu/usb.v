@@ -99,6 +99,7 @@ module usb(
     reg [3:0] set_usb_control_endpoint;
     reg [1:0] set_usb_control_token;
     reg next_data_sync_bit;
+    reg [15:0] next_data_crc;
 
     always @* begin
         next_top_state = top_state;
@@ -119,6 +120,7 @@ module usb(
         next_current_transaction_address = current_transaction_address;
         next_current_transaction_endpoint = current_transaction_endpoint;
         next_data_sync_bit = data_sync_bit;
+        next_data_crc = data_crc;
 
         got_usb_packet = 0;
         data_buffer_address = 8'bx;
@@ -162,6 +164,9 @@ module usb(
 
                     if (!skip_bit) begin
                         next_read_write_buffer = read_bits;
+                        next_data_crc = data_crc[15] ^ nzri_decoded_data
+                                ? (data_crc << 1) ^ 16'b1000000000000101
+                                : (data_crc << 1);
                         // run got_bit after everything else to allow it
                         // to override other values
                         got_bit();
@@ -178,7 +183,7 @@ module usb(
 
     localparam PACKET_STATE_WRITE_DATA = 0;
     localparam PACKET_STATE_READING = 2;
-    localparam PACKET_STATE_READ_COMPLETE = 3;
+    localparam PACKET_STATE_WRITE_DATA_CRC = 3;
     localparam PACKET_STATE_WRITE_DATA_PID = 4;
     localparam PACKET_STATE_AWAIT_END_OF_PACKET = 5;
     localparam PACKET_STATE_SYNCING = 6;
@@ -231,6 +236,7 @@ module usb(
     reg [3:0] stall_counter;
     reg [7:0] words_read_written;
     reg data_sync_bit; // TODO implement data sync bit error handling
+    reg [15:0] data_crc;
 
     wire read_complete = read_write_bits_count == 1;
     wire write_complete = read_write_bits_count == 1;
@@ -264,6 +270,7 @@ module usb(
                             TRANSACTION_STATE_AWAIT_DATA: begin
                                 if (read_bits[27:24] == current_data_pid) begin
                                     next_packet_state = PACKET_STATE_READING_DATA;
+                                    next_data_crc = ~0;
                                     next_words_read_written = 0;
                                     next_read_write_bits_count = 32;
                                 end else begin
@@ -435,10 +442,12 @@ module usb(
                         next_words_read_written = 0;
                         data_buffer_address = 0;
                         next_read_write_bits_count = bytes_to_read_write_bit_count(usb_control[9:0]);
+                        next_data_crc = ~0;
                         next_packet_state = PACKET_STATE_WRITE_DATA;
                     end else begin
-                        next_send_eop = 1;
-                        next_packet_state = PACKET_STATE_SEND_EOP;
+                        next_read_write_buffer[15:0] = 0;
+                        next_read_write_bits_count = 16;
+                        next_packet_state = PACKET_STATE_WRITE_DATA_CRC;
                     end
                 end
             end
@@ -456,12 +465,23 @@ module usb(
                                                // (of the module input clock, not a bit time)
                         next_read_write_bits_count = bytes_to_read_write_bit_count(usb_control[9:0] - (next_words_read_written * 4));
                     end else begin
-                        next_send_eop = 1;
-                        next_packet_state = PACKET_STATE_SEND_EOP;
+                        // reverse and negate crc bits
+                        for (reg [4:0] i = 0; i < 16; i = i + 1) begin
+                            // use next_data_crc instead of data_crc because I need to include the current bit
+                            next_read_write_buffer[i] = !next_data_crc[15 - i];
+                        end
+                        next_read_write_bits_count = 16;
+                        next_packet_state = PACKET_STATE_WRITE_DATA_CRC;
                     end
                 end
 
                 // TODO need to send the CRC16 at the end of the packet
+            end
+            PACKET_STATE_WRITE_DATA_CRC: begin
+                if (write_complete) begin
+                    next_send_eop = 1;
+                    next_packet_state = PACKET_STATE_SEND_EOP;
+                end
             end
             PACKET_STATE_SEND_EOP: begin
                 next_send_eop = 1;
@@ -493,6 +513,7 @@ module usb(
         current_transaction_address <= next_current_transaction_address;
         current_transaction_endpoint <= next_current_transaction_endpoint;
         data_sync_bit <= next_data_sync_bit;
+        data_crc <= next_data_crc;
 
         if (se0) begin
             reset_counter <= reset_counter + 1;

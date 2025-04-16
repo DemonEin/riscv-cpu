@@ -155,22 +155,35 @@ module tb_usb();
     endtask
 
 
-    reg [7:0] receive_data_data[1024];
+    reg [7:0] receive_data_data[1026];
+    reg [15:0] data_crc;
     task receive_data(input [3:0] pid, output [7:0] data[1023], output [31:0] byte_count);
         $display("waiting to receive data packet");
         receive_packet(receive_data_data, byte_count);
-        if (!(byte_count > 0 && receive_data_data[0] == { ~pid, pid })) begin
+        if (!(byte_count >= 3 && receive_data_data[0] == { ~pid, pid })) begin
             $stop("did not receive data");
         end
 
-        byte_count = byte_count - 1;
+        // verify crc
+        data_crc = ~0;
+        for (reg [31:0] bit_index = 8; bit_index < byte_count * 8; bit_index = bit_index + 1) begin
+            data_crc = data_crc[15] ^ receive_data_data[bit_index / 8][bit_index % 8]
+                    ? (data_crc << 1) ^ 16'b1000000000000101
+                    : (data_crc << 1);
+        end
+        if (data_crc != 16'b1000000000001101) begin
+            $display("data packet received with invalid crc, %h", data_crc);
+            $stop;
+        end
+
+        byte_count = byte_count - 3;
         for (reg [31:0] i = 0; i < byte_count; i = i + 1) begin
             data[i] = receive_data_data[i + 1];
         end
     endtask
 
 
-    reg [7:0] receive_ack_data[1024];
+    reg [7:0] receive_ack_data[1026];
     reg [31:0] receive_ack_data_length;
     task receive_ack();
         $display("waiting to receive ack packet");
@@ -257,7 +270,7 @@ module tb_usb();
     reg [31:0] received_bit_count;
     reg nzri_decoded_bit;
     reg [31:0] receive_timeout;
-    task receive_packet(output [7:0] data[1024], output[31:0] byte_count);
+    task receive_packet(output [7:0] data[1026], output[31:0] byte_count);
         // receive sync pattern
         // assume starting in idle or eop state
         receive_timeout = 477707; // 10 milliseconds of FULL_SPEED_PERIOD
