@@ -23,13 +23,18 @@ ifndef no_link_library
 	cpulib_argument := $(cpulib.o)
 endif
 
+picolibc_configure_directory := $(current_directory)target/lib/picolibc/configure
+picolibc_install_directory := $(current_directory)target/lib/picolibc/install
+libc.a := $(picolibc_install_directory)/lib/rv32i/ilp32/libc.a
+libc_headers := $(picolibc_install_directory)/include
+
 .NOTINTERMEDIATE:
 
 %/verilator/sim: $(testbench) %/memory.hex %/entry.txt $(needed_verilog_files)
 	verilator $(VERILATOR_OPTIONS) +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) +define+MEMORY_FILE=\"$*/memory.hex\" --binary -j 0 $(testbench) -Mdir $(@D) -o $(@F)
 
-%/a.out: $(program_files) $(cpulib_argument) $(linker_script) | %
-	$(gcc_binary_prefix)gcc $(GCC_OPTIONS) -I $(current_directory) -T $(linker_script) -nostdlib -o $@ $(program_files) $(cpulib_argument)
+%/a.out: $(program_files) $(cpulib_argument) $(linker_script) $(libc_headers) $(libc.a) | %
+	$(gcc_binary_prefix)gcc $(GCC_OPTIONS) -I $(current_directory) -T $(linker_script) -nostdlib -o $@ $(program_files) $(cpulib_argument) -I$(libc_headers) $(libc.a)
 
 %/memory.bin %/entry.txt &: %/a.out
 	cargo run --manifest-path $(current_directory)loader/Cargo.toml -- \
@@ -38,14 +43,28 @@ endif
 %.hex: %.bin
 	hexdump -v -e '/4 "%x "' $< > $@
 
-$(cpulib.o): $(lib)/cpulib.h $(lib)/cpulib.c $(lib)/cpulib.s $(lib)/usb.c | $(current_directory)target/lib
-	$(gcc_binary_prefix)gcc $(GCC_OPTIONS) -r $(lib)/cpulib.c $(lib)/cpulib.s $(lib)/usb.c -o $@
+$(cpulib.o): $(lib)/cpulib.h $(lib)/cpulib.c $(lib)/cpulib.s $(lib)/usb.c $(libc_headers) | $(current_directory)target/lib
+	$(gcc_binary_prefix)gcc $(GCC_OPTIONS) -r $(lib)/cpulib.c $(lib)/cpulib.s $(lib)/usb.c -I$(libc_headers) -o $@
 
 $(target_directory):
 	mkdir -p $@
 
 $(current_directory)target/lib:
 	mkdir -p $@
+
+$(libc.a) $(libc_headers) &: $(picolibc_configure_directory)
+	cd $(picolibc_configure_directory) && \
+		ninja && \
+		ninja install
+
+$(picolibc_configure_directory): $(lib)/picolibc
+	meson setup $(picolibc_configure_directory) \
+		$(lib)/picolibc \
+		-Dmultilib-list=rv32i/ilp32 \
+		-Dincludedir=include \
+		-Dlibdir=lib \
+		-Dprefix=$$(pwd)/$(picolibc_install_directory) \
+		--cross-file $(lib)/cross-riscv32-unknown-elf.txt
 
 %/cpu.json: $(needed_verilog_files) %/memory.hex %/entry.txt
 	@# run verilator --lint-only before building because yosys does not report many simple errors

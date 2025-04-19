@@ -1,3 +1,8 @@
 CompileFlags:
-  Add: [ -I.., -xc, -std=c23 ]
+  Add: [ 
+    -I.,
+    -Itarget/lib/picolibc/install/include,
+    -xc,
+    -std=c23
+  ]
   Compiler: riscv32-elf-gcc
