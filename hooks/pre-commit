@@ -1,0 +1,6 @@
+#!/bin/bash
+
+if [ -n "$(git clang-format --staged -q --diffstat)" ]; then
+    echo "format error; use git clang-format --staged [-f] to format, then stage and commit again"
+    exit 1
+fi

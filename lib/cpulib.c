@@ -1,14 +1,14 @@
 #include "cpulib.h"
 #include "stdbool.h"
 
-volatile uint64_t* timer_cmp = (uint64_t*) 0x80000000 + 8;
+volatile uint64_t* timer_cmp = (uint64_t*)0x80000000 + 8;
 
 void set_timer(uint64_t time) {
     *timer_cmp = *timer_cmp + time;
     int set_val = 1 << 7;
-    asm("csrrs zero, mie, %0" : : "r" (set_val));
+    asm("csrrs zero, mie, %0" : : "r"(set_val));
     set_val = 1 << 3;
-    asm("csrrs zero, mstatus, %0" : : "r" (set_val));
+    asm("csrrs zero, mstatus, %0" : : "r"(set_val));
 }
 
 void sleep_ms(uint32_t time) {
@@ -16,7 +16,7 @@ void sleep_ms(uint32_t time) {
 }
 
 void simulation_putc(char c) {
-    simulation_print((char [2]) { c, '\0' });
+    simulation_print((char[2]) { c, '\0' });
 }
 
 #define MORSE_TIME_UNIT 200 // in ms

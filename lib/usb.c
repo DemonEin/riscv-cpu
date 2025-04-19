@@ -104,7 +104,7 @@ static struct data_response handle_setup_transaction(uint16_t data_length) {
     }
 
     in_control_transfer = true;
-    setup_data = *(volatile struct setup_data*) usb_data_buffer;
+    setup_data = *(volatile struct setup_data*)usb_data_buffer;
     return (struct data_response) { false, HANDSHAKE_ACK };
 }
 
@@ -181,8 +181,8 @@ static uint32_t make_usb_response(const uint32_t usb_control_copy) {
     if (token == TOKEN_SETUP || token == TOKEN_OUT) {
         const uint16_t data_length = usb_control_copy & 0x3ff;
         const struct data_response data_response = token == TOKEN_SETUP
-                ? handle_setup_transaction(data_length)
-                : handle_out_transaction(data_length);
+            ? handle_setup_transaction(data_length)
+            : handle_out_transaction(data_length);
         if (data_response.ignore) {
             return USB_CONTROL_IGNORE;
         } else {
