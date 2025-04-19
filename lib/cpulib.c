@@ -1,5 +1,4 @@
 #include "cpulib.h"
-#include "stdbool.h"
 
 volatile uint64_t* timer_cmp = (uint64_t*)0x80000000 + 8;
 

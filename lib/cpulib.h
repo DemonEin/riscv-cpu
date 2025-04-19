@@ -1,5 +1,3 @@
-#include <stdbool.h>
-
 // using ILP32 convention
 typedef signed char int8_t;
 typedef short int16_t;
