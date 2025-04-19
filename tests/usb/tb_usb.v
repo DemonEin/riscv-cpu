@@ -195,10 +195,24 @@ module tb_usb();
     endtask
 
     reg [7:0] send_token_packet_data[1026];
+    reg [4:0] token_crc;
     task send_token_packet(input [3:0] pid);
         send_token_packet_data[0] = { ~pid, pid };
+
+        // generate crc
+        token_crc = ~0;
+        for (reg [31:0] bit_index = 0; bit_index < 11; bit_index = bit_index + 1) begin
+            token_crc = token_crc[4] ^ { test_device_endpoint, test_device_address }[bit_index]
+                ? (token_crc << 1) ^ 5'b00101
+                : (token_crc << 1);
+        end
+
         send_token_packet_data[1] = { test_device_endpoint[0], test_device_address };
-        send_token_packet_data[2] = { 5'b0, test_device_endpoint[3:1] }; // leave CRC5 as zero for now
+        send_token_packet_data[2][2:0] = test_device_endpoint[3:1];
+        for (reg [31:0] i = 0; i < 5; i = i + 1) begin
+            send_token_packet_data[2][i + 3] = !token_crc[4 - i];
+        end
+
         send_packet(send_token_packet_data, 3);
     endtask
 

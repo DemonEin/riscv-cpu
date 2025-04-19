@@ -99,6 +99,7 @@ module usb(
     reg [3:0] set_usb_control_endpoint;
     reg [1:0] set_usb_control_token;
     reg next_data_sync_bit;
+    reg [4:0] next_token_crc;
     reg [15:0] next_data_crc;
 
     always @* begin
@@ -120,6 +121,7 @@ module usb(
         next_current_transaction_address = current_transaction_address;
         next_current_transaction_endpoint = current_transaction_endpoint;
         next_data_sync_bit = data_sync_bit;
+        next_token_crc = token_crc;
         next_data_crc = data_crc;
 
         got_usb_packet = 0;
@@ -167,6 +169,9 @@ module usb(
                         next_data_crc = data_crc[15] ^ nzri_decoded_data
                                 ? (data_crc << 1) ^ 16'b1000000000000101
                                 : (data_crc << 1);
+                        next_token_crc = token_crc[4] ^ nzri_decoded_data
+                                ? (token_crc << 1) ^ 5'b00101
+                                : (token_crc << 1);
                         // run got_bit after everything else to allow it
                         // to override other values
                         got_bit();
@@ -236,6 +241,7 @@ module usb(
     reg [3:0] stall_counter;
     reg [8:0] words_read_written;
     reg data_sync_bit; // TODO implement data sync bit error handling
+    reg [4:0] token_crc;
     reg [15:0] data_crc;
 
     wire read_complete = read_write_bits_count == 1;
@@ -289,6 +295,7 @@ module usb(
                                     next_read_write_bits_count = 16;
                                     next_current_transaction_pid = read_bits[27:24];
                                     next_packet_state = PACKET_STATE_READING_TOKEN;
+                                    next_token_crc = ~0;
                                     next_transaction_state = TRANSACTION_STATE_AWAIT_DATA;
                                 end else begin
                                     `ifdef simulation
@@ -325,27 +332,36 @@ module usb(
             end
             PACKET_STATE_READING_TOKEN: begin
                 if (read_complete) begin
-                    next_current_transaction_address = read_bits[22:16];
-                    next_current_transaction_endpoint = read_bits[26:23];
+                    if (next_token_crc == 5'b01100) begin
+                        next_current_transaction_address = read_bits[22:16];
+                        next_current_transaction_endpoint = read_bits[26:23];
 
-                    if (current_transaction_pid == PID_OUT || current_transaction_pid == PID_SETUP) begin
-                        next_transaction_state = TRANSACTION_STATE_AWAIT_DATA;
-                        next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET; // TODO ignore if not receiving EOP immediately?
+                        if (current_transaction_pid == PID_OUT || current_transaction_pid == PID_SETUP) begin
+                            next_transaction_state = TRANSACTION_STATE_AWAIT_DATA;
+                            next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET; // TODO ignore if not receiving EOP immediately?
 
-                        if (current_transaction_pid == PID_SETUP) begin
-                            next_data_sync_bit = 0;
+                            if (current_transaction_pid == PID_SETUP) begin
+                                next_data_sync_bit = 0;
+                            end
+                        end else if (current_transaction_pid == PID_IN) begin
+                            got_usb_packet = 1;
+                            next_pending_send = PENDING_SEND_DATA;
+                            next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
+                            set_usb_control_address = next_current_transaction_address;
+                            set_usb_control_endpoint = next_current_transaction_endpoint;
+                            set_usb_control_token = current_transaction_pid[3:2];
+                        end else begin
+                            // this is an internal error, should never happen
+                            `ifdef simulation
+                                $stop;
+                            `endif
                         end
-                    end else if (current_transaction_pid == PID_IN) begin
-                        got_usb_packet = 1;
-                        next_pending_send = PENDING_SEND_DATA;
-                        next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
-                        set_usb_control_address = next_current_transaction_address;
-                        set_usb_control_endpoint = next_current_transaction_endpoint;
-                        set_usb_control_token = current_transaction_pid[3:2];
                     end else begin
-                        // this is an internal error, should never happen
                         `ifdef simulation
+                            $display("got bad next_token_crc: 0x%h", next_token_crc);
                             $stop;
+                        `else
+                            next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
                         `endif
                     end
                 end
@@ -532,6 +548,7 @@ module usb(
         current_transaction_address <= next_current_transaction_address;
         current_transaction_endpoint <= next_current_transaction_endpoint;
         data_sync_bit <= next_data_sync_bit;
+        token_crc <= next_token_crc;
         data_crc <= next_data_crc;
 
         if (se0) begin
