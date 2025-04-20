@@ -8,7 +8,9 @@ localparam ADDRESS_LED = 32'h80000010;
 localparam ADDRESS_USB_CONTROL = 32'h80000014;
 localparam ADDRESS_USB_DATA_BUFFER = 32'hc0000000;
 
-localparam USB_DATA_BUFFER_SIZE = 1023; // in bytes
+// this would only need to be 1023 bytes to contain the maximum size data
+// payload but this way it makes only full memory words
+localparam USB_DATA_BUFFER_SIZE = 1024; // in bytes
 
 module top(
     input clk48,
@@ -37,7 +39,7 @@ module top(
         usb_module_usb_data_buffer_write_value,
         next_program_counter;
     wire [2:0] unshifted_memory_write_sections;
-    wire [$clog2(USB_DATA_BUFFER_SIZE/4) - 1:0] usb_data_buffer_address;
+    wire [7:0] usb_data_buffer_address;
     wire write_to_usb_data_buffer;
     wire handled_usb_packet;
     wire got_usb_packet;
