@@ -52,12 +52,7 @@ $(target_directory):
 $(current_directory)target/lib:
 	mkdir -p $@
 
-$(libc.a) $(libc_headers) &: $(picolibc_configure_directory)
-	cd $(picolibc_configure_directory) && \
-		ninja && \
-		ninja install
-
-$(picolibc_configure_directory): $(lib)/picolibc
+$(libc.a) $(libc_headers) &: $(lib)/picolibc
 	meson setup $(picolibc_configure_directory) \
 		$(lib)/picolibc \
 		-Dmultilib-list=rv32i/ilp32 \
@@ -65,6 +60,10 @@ $(picolibc_configure_directory): $(lib)/picolibc
 		-Dlibdir=lib \
 		-Dprefix=$$(pwd)/$(picolibc_install_directory) \
 		--cross-file $(lib)/cross-riscv32-unknown-elf.txt
+
+	cd $(picolibc_configure_directory) && \
+		ninja && \
+		ninja install
 
 %/cpu.json: $(needed_verilog_files) %/memory.hex %/entry.txt
 	@# run verilator --lint-only before building because yosys does not report many simple errors
