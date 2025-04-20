@@ -1,4 +1,13 @@
 #include "cpulib.h"
+#include <stdio.h>
+
+static int __stdout_putc(char c, FILE* file) {
+    simulation_putc(c);
+    return c;
+}
+
+static FILE __stdout = FDEV_SETUP_STREAM(__stdout_putc, nullptr, nullptr, _FDEV_SETUP_WRITE);
+FILE* const stdout = &__stdout;
 
 volatile uint64_t* timer_cmp = (uint64_t*)0x80000000 + 8;
 
