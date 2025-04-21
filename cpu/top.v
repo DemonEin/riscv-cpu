@@ -1,4 +1,4 @@
-localparam MEMORY_SIZE = 4096;
+localparam MEMORY_SIZE = 4096; // in 4-byte words
 
 localparam ADDRESS_MTIME = 32'h80000000;
 localparam ADDRESS_MTIMEH = ADDRESS_MTIME + 4;

@@ -1,6 +1,6 @@
 .global _start
 _start:
-    li sp, (0x1000 - 16) # must have 128 bit alignment at procedure entry according to ABI
+    li sp, 0x3ff0 # must have 128 bit alignment at procedure entry according to ABI
     lui t0, %hi(on_trap)
     addi t0, t0, %lo(on_trap)
     csrrs zero, mtvec, t0
