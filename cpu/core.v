@@ -203,8 +203,9 @@ module core(
 
     `ifdef simulation
         reg finish;
-        reg error;
+        reg fail;
         reg simulation_print;
+        reg illegal_instruction;
     `endif
 
     always @* begin
@@ -315,7 +316,7 @@ module core(
                 end
                 OPCODE_BRANCH: begin
                     if (funct3 == 3'b010 || funct3 == 'b011) begin
-                        raise(MCAUSE_ILLEGAL_INSTRUCTION);
+                        raise_illegal_instruction();
                     end else begin
                         comparator_opcode = funct3;
                         comparator_operand_1 = register_read_value_1;
@@ -332,7 +333,7 @@ module core(
                 end
                 OPCODE_LOAD: begin
                     if (funct3 == 3'b011 || funct3 == 3'b110 || funct3 == 3'b111) begin
-                        raise(MCAUSE_ILLEGAL_INSTRUCTION);
+                        raise_illegal_instruction();
                     end else begin
                         alu_opcode = ALU_OPCODE_ADD;
                         alu_operand_1 = register_read_value_1;
@@ -360,7 +361,7 @@ module core(
                         // and the code is simpler; this may complicate
                         // the netlist with future changes so that should be
                         // checked later
-                        default: raise(MCAUSE_ILLEGAL_INSTRUCTION);
+                        default: raise_illegal_instruction();
                     endcase
                 end
                 OPCODE_IMMEDIATE: begin
@@ -425,18 +426,18 @@ module core(
                                             finish = 1; 
                                         end
                                         FUNC12_TEST_FAIL: begin
-                                            error = 1;
+                                            fail = 1;
                                         end
                                         FUNC12_SIMULATION_PRINT: begin
                                             simulation_print = 1;
                                         end
                                     `endif
                                     default: begin
-                                        raise(MCAUSE_ILLEGAL_INSTRUCTION);
+                                        raise_illegal_instruction();
                                     end
                                 endcase
                             end else begin
-                                raise(MCAUSE_ILLEGAL_INSTRUCTION);
+                                raise_illegal_instruction();
                             end
                         end
                         FUNCT3_CSRRW: begin
@@ -447,7 +448,7 @@ module core(
                                 csr_write_enable = 1;
                                 csr_write_value = register_read_value_1;
                             end else begin
-                                raise(MCAUSE_ILLEGAL_INSTRUCTION);
+                                raise_illegal_instruction();
                             end
                         end
                         FUNCT3_CSRRS: begin
@@ -460,7 +461,7 @@ module core(
                                     csr_write_value = csr_read_value | register_read_value_1;
                                 end
                             end else begin
-                                raise(MCAUSE_ILLEGAL_INSTRUCTION);
+                                raise_illegal_instruction();
                             end
                         end
                         FUNCT3_CSRRC: begin
@@ -473,7 +474,7 @@ module core(
                                     csr_write_value = csr_read_value & (~register_read_value_1);
                                 end
                             end else begin
-                                raise(MCAUSE_ILLEGAL_INSTRUCTION);
+                                raise_illegal_instruction();
                             end
                         end
                         FUNCT3_CSRRWI: begin
@@ -484,7 +485,7 @@ module core(
                                 csr_write_enable = 1;
                                 csr_write_value = csr_immediate;
                             end else begin
-                                raise(MCAUSE_ILLEGAL_INSTRUCTION);
+                                raise_illegal_instruction();
                             end
                         end
                         FUNCT3_CSRRSI: begin
@@ -497,7 +498,7 @@ module core(
                                     csr_write_value = csr_read_value | csr_immediate;
                                 end
                             end else begin
-                                raise(MCAUSE_ILLEGAL_INSTRUCTION);
+                                raise_illegal_instruction();
                             end
                         end
                         FUNCT3_CSRRCI: begin
@@ -510,16 +511,16 @@ module core(
                                     csr_write_value = csr_read_value & (~csr_immediate);
                                 end
                             end else begin
-                                raise(MCAUSE_ILLEGAL_INSTRUCTION);
+                                raise_illegal_instruction();
                             end
                         end
                         default: begin 
-                            raise(MCAUSE_ILLEGAL_INSTRUCTION);
+                            raise_illegal_instruction();
                         end
                     endcase
                 end
                 default: begin
-                    raise(MCAUSE_ILLEGAL_INSTRUCTION);
+                    raise_illegal_instruction();
                 end
             endcase
         end
@@ -610,6 +611,13 @@ module core(
             minstret <= next_minstret;
         end
     end
+
+    task raise_illegal_instruction();
+        raise(MCAUSE_ILLEGAL_INSTRUCTION);
+        `ifdef simulation
+            illegal_instruction = 1;
+        `endif
+    endtask
 
     task raise(input [31:0] _mcause);
         trap = 1;
@@ -776,8 +784,15 @@ module core(
         end
 
         always @* begin
-            if (error) begin
+            if (fail) begin
                 $display("got fail instruction");
+            end
+
+            if (illegal_instruction) begin
+                $display("got illegal instruction");
+            end
+
+            if (fail || illegal_instruction) begin
                 $display("pc: 0x%h", program_counter);
                 $display("registers (decimal/hex):");
                 $display("    ra: %d/0x%h", registers.r[1], registers.r[1]);
