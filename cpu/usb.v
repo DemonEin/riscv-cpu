@@ -205,6 +205,7 @@ module usb(
     localparam PENDING_SEND_NONE = 0;
     localparam PENDING_SEND_HANDSHAKE = 1;
     localparam PENDING_SEND_DATA = 2;
+    localparam PENDING_SEND_ANY = 3; // will send whatever the software responds with
 
     localparam TRANSACTION_STATE_IDLE = 0;
     localparam TRANSACTION_STATE_AWAIT_DATA = 1;
@@ -345,7 +346,7 @@ module usb(
                             end
                         end else if (current_transaction_pid == PID_IN) begin
                             got_usb_packet = 1;
-                            next_pending_send = PENDING_SEND_DATA;
+                            next_pending_send  = PENDING_SEND_ANY;
                             next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
                             set_usb_control_address = next_current_transaction_address;
                             set_usb_control_endpoint = next_current_transaction_endpoint;
@@ -385,7 +386,7 @@ module usb(
                         set_usb_control_endpoint = current_transaction_endpoint;
                         set_usb_control_token = current_transaction_pid[3:2];
                         got_usb_packet = 1;
-                        next_pending_send = PENDING_SEND_HANDSHAKE;
+                        next_pending_send = PENDING_SEND_ANY;
                         next_packet_state = PACKET_STATE_FINISH;
                     end else begin
                         `ifdef simulation
@@ -425,15 +426,27 @@ module usb(
             PACKET_STATE_WRITE_PAUSE: begin
                 if (stall_counter == 0 && !usb_packet_ready) begin // usb_packet_ready is set to zero when the software
                                                                    // has handled the transaction
-                    if (!usb_control[23]) begin // usb_control[23] is whether to ignore the transaction
+                    if (usb_control[24:23] == 2'b00) begin
+                        // ignore transaction
+                        next_top_state = TOP_STATE_IDLE;
+                        next_transaction_state = TRANSACTION_STATE_IDLE;
+                    end else if (usb_control[24:23] == 2'b01 || usb_control[24:23] == 2'b10) begin
                         next_consecutive_nzri_data_ones = 0;
                         next_write_enable = 1;
                         next_packet_state = PACKET_STATE_WRITE_SYNC;
                         next_read_write_bits_count = 8;
                         next_read_write_buffer[7:0] = DECODED_SYNC_PATTERN;
+
+                        if (usb_control[24:23] == 2'b01) begin
+                            next_pending_send = PENDING_SEND_HANDSHAKE;
+                        end else if (usb_control[24:23] == 2'b10) begin
+                            next_pending_send = PENDING_SEND_DATA;
+                        end
                     end else begin
-                        next_top_state = TOP_STATE_IDLE;
-                        next_transaction_state = TRANSACTION_STATE_IDLE;
+                        `ifdef simulation
+                            $display("got invalid usb_control value");
+                            $stop;
+                        `endif
                     end
                 end
             end

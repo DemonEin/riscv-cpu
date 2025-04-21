@@ -1,4 +1,5 @@
 #include "cpulib.h"
+#include <stdio.h>
 
 enum bRequest : uint8_t {
     BREQUEST_GET_STATUS = 0,
@@ -70,8 +71,10 @@ extern volatile uint8_t usb_data_buffer[1023];
  *                 11 for STALL
  *
  *             (the top two bits of the PID)
- * bit 23: when writing, 1 to ignore the transaction
- *         and 0 to respond (either with handshake or data)
+ * bits 23-24: when writing:
+ *     00 to ignore the transaction
+ *     01 to respond with a handshake packet
+ *     10 to respond with a data packet
  *             
  * writing to this signals to the gateware to continue
  */
@@ -92,41 +95,47 @@ static struct bConfiguration configuration = {
     0 // TODO come up with a real number for this
 };
 
-struct data_response {
-    bool ignore;
-    enum handshake handshake;
+struct response {
+    enum response_type {
+        RESPONSE_TYPE_IGNORE = 0b00,
+        RESPONSE_TYPE_HANDSHAKE = 0b01,
+        RESPONSE_TYPE_DATA = 0b10,
+    } type;
+    union {
+        enum handshake handshake;
+        uint16_t data_length;
+    };
 };
 
-static struct data_response handle_setup_transaction(uint16_t data_length) {
+static struct response handle_setup_transaction(uint16_t data_length) {
     if (data_length != 8) {
-        simulation_print("got bad number of bytes for setup transaction");
-        return (struct data_response) { true, 0 };
+        puts("got bad number of bytes for setup transaction");
+        return (struct response){ RESPONSE_TYPE_IGNORE, 0 };
     }
 
     in_control_transfer = true;
     setup_data = *(volatile struct setup_data*)usb_data_buffer;
-    return (struct data_response) { false, HANDSHAKE_ACK };
+    return (struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_ACK };
 }
 
-static struct data_response handle_out_transaction(uint16_t data_length) {
+static struct response handle_out_transaction(uint16_t data_length) {
     if (!in_control_transfer) {
-        return (struct data_response) { false, HANDSHAKE_NAK };
+        return (struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_NAK };
     }
 
     if (setup_data.bmRequestType & (1 << 7)) {
         // in the status stage of an IN control transfer
-        return (struct data_response) { false, HANDSHAKE_ACK };
+        return (struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_ACK };
     } else {
         // in the data stage of an OUT control transfer
     }
-    return (struct data_response) { true, 0 };
+    return (struct response){ RESPONSE_TYPE_IGNORE, 0 };
 }
 
-// returns the number of bytes to send from usb_data_buffer
-static uint16_t handle_in_transaction() {
+static struct response handle_in_transaction() {
     if (!in_control_transfer) {
         // TODO return some kind of bad handshake in the error case
-        return 0;
+        return (struct response){ RESPONSE_TYPE_IGNORE, 0 };
     }
 
     if ((setup_data.bmRequestType & (1 << 7)) == 0x80) { // 0 is host-to-device, 1 is device-to-host
@@ -134,10 +143,10 @@ static uint16_t handle_in_transaction() {
         switch (setup_data.bRequest) {
             case BREQUEST_GET_CONFIGURATION:
                 usb_data_buffer[0] = configuration.bConfigurationValue;
-                return 1;
+                return (struct response){ RESPONSE_TYPE_DATA, 1 };
             default:
                 // TODO return some kind of bad handshake
-                return 0;
+                return (struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_STALL };
         }
     } else {
         // this is the status stage of an out control transfer
@@ -148,7 +157,7 @@ static uint16_t handle_in_transaction() {
         }
 
         in_control_transfer = false;
-        return 0;
+        return (struct response){ RESPONSE_TYPE_DATA, 0 };
     }
 }
 
@@ -169,33 +178,38 @@ static uint16_t handle_in_transaction() {
  *         gateware to send the numbers of bytes specified by usb_control
  *        in usb_data_buffer in a data packet
  */
-#define USB_CONTROL_IGNORE (1 << 23)
-
-static uint32_t make_usb_response(const uint32_t usb_control_copy) {
+static struct response make_usb_response(const uint32_t usb_control_copy) {
     if (((usb_control_copy >> 10) & 0x7f) != device_address) {
-        simulation_print("ignoring due to address");
-        return USB_CONTROL_IGNORE;
+        puts("ignoring due to address");
+        return (struct response){ RESPONSE_TYPE_IGNORE, 0 };
     }
 
     const unsigned int token = usb_control_copy >> 21 & 0b11;
     if (token == TOKEN_SETUP || token == TOKEN_OUT) {
         const uint16_t data_length = usb_control_copy & 0x3ff;
-        const struct data_response data_response = token == TOKEN_SETUP
-            ? handle_setup_transaction(data_length)
-            : handle_out_transaction(data_length);
-        if (data_response.ignore) {
-            return USB_CONTROL_IGNORE;
-        } else {
-            return data_response.handshake << 21;
-        }
+        return token == TOKEN_SETUP ? handle_setup_transaction(data_length)
+                                    : handle_out_transaction(data_length);
     } else if (token == TOKEN_IN) {
         return handle_in_transaction();
     } else {
-        simulation_print("invalid token bits");
-        return USB_CONTROL_IGNORE;
+        puts("invalid token bits");
+        return (struct response){ RESPONSE_TYPE_IGNORE, 0 };
     }
 }
 
 void handle_usb_transaction() {
-    usb_control = make_usb_response(usb_control);
+    const struct response response = make_usb_response(usb_control);
+    uint32_t result_usb_control = response.type << 23;
+    switch (response.type) {
+        case RESPONSE_TYPE_IGNORE:
+            break;
+        case RESPONSE_TYPE_HANDSHAKE:
+            result_usb_control |= response.handshake << 21;
+            break;
+        case RESPONSE_TYPE_DATA:
+            result_usb_control |= response.data_length & 0x3ff;
+            break;
+    }
+
+    usb_control = result_usb_control;
 }
