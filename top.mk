@@ -34,7 +34,17 @@ libc_headers := $(picolibc_install_directory)/include
 	verilator $(VERILATOR_OPTIONS) +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) +define+MEMORY_FILE=\"$*/memory.hex\" --binary -j 0 $(testbench) -Mdir $(@D) -o $(@F)
 
 %/a.out: $(program_files) $(cpulib_argument) $(linker_script) $(libc_headers) $(libc.a) | %
-	$(gcc_binary_prefix)gcc $(GCC_OPTIONS) -I $(current_directory) -T $(linker_script) -nostdlib -o $@ $(program_files) $(cpulib_argument) -I$(libc_headers) $(libc.a)
+	$(gcc_binary_prefix)gcc \
+		$(GCC_OPTIONS) \
+		-I $(current_directory) \
+		-T $(linker_script) \
+		-nostdlib \
+		-o $@ \
+		$(program_files) \
+		$(cpulib_argument) \
+		-I$(libc_headers) \
+		$(libc.a) \
+		-lgcc
 
 %/memory.bin %/entry.txt &: %/a.out
 	cargo run --manifest-path $(current_directory)loader/Cargo.toml -- \
