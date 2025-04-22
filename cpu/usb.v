@@ -22,14 +22,18 @@ module usb(
     output reg write_to_data_buffer,
     input usb_packet_ready,
     input [31:0] usb_control,
-    output wire [31:0] set_usb_control = {
+    output wire [31:0] set_usb_control
+);
+    // assigning this doesn't work sometimes when in the port connection,
+    // so do it here even though I don't know why that wasn't working
+    assign set_usb_control = {
         9'bx, 
         set_usb_control_token,
         set_usb_control_endpoint,
         set_usb_control_address,
         set_usb_control_data_length
-    }
-);
+    };
+
     reg [1:0] top_state = TOP_STATE_POWERED;
 
     // decoding and sending interface
