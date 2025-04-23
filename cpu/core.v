@@ -829,7 +829,7 @@ module core(
 
                 core_file = $fopen("core", "w");
                 if (core_file != 0) begin
-                    for (reg [31:0] i = 0; i < MEMORY_SIZE * 4; i = i + 1) begin
+                    for (reg [31:0] i = 0; i < MEMORY_SIZE; i = i + 1) begin
                         $fwriteb(core_file, "%u", top.memory[i]);
                     end
                     $display("core written to ./core");
