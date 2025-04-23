@@ -122,7 +122,7 @@ module top(
         endcase
         pending_read_shift <= memory_address[1:0];
 
-        if (memory_address < MEMORY_SIZE) begin
+        if (memory_address < MEMORY_SIZE * 4) begin
             if (memory_write_sections[0]) begin
                 memory[memory_address[13:2]][7:0] <= memory_write_value[7:0];
             end
