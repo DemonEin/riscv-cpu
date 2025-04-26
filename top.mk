@@ -44,7 +44,9 @@ libc_headers := $(picolibc_install_directory)/include
 		$(cpulib_argument) \
 		-I$(libc_headers) \
 		$(libc.a) \
-		-lgcc
+		-lgcc \
+		-Os \
+		-ggdb
 
 %/memory.bin %/entry.txt &: %/a.out
 	cargo run --manifest-path $(current_directory)loader/Cargo.toml -- \
@@ -54,7 +56,7 @@ libc_headers := $(picolibc_install_directory)/include
 	hexdump -v -e '/4 "%x "' $< > $@
 
 $(cpulib.o): $(lib)/cpulib.h $(lib)/cpulib.c $(lib)/cpulib.s $(lib)/usb.c $(libc_headers) | $(current_directory)target/lib
-	$(gcc_binary_prefix)gcc $(GCC_OPTIONS) -r $(lib)/cpulib.c $(lib)/cpulib.s $(lib)/usb.c -I$(libc_headers) -o $@
+	$(gcc_binary_prefix)gcc $(GCC_OPTIONS) -r $(lib)/cpulib.c $(lib)/cpulib.s $(lib)/usb.c -I$(libc_headers) -o $@ -Os -ggdb
 
 $(target_directory):
 	mkdir -p $@
