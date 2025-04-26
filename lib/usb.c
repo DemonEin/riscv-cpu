@@ -107,6 +107,11 @@ struct response {
         uint16_t data_length;
     };
 };
+#define RESPONSE_IGNORE ((struct response){ RESPONSE_TYPE_IGNORE, 0 })
+#define RESPONSE_ACK ((struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_ACK })
+#define RESPONSE_NAK ((struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_NAK })
+#define RESPONSE_STALL ((struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_STALL })
+#define RESPONSE_DATA(LENGTH) ((struct response){ RESPONSE_TYPE_DATA, LENGTH })
 
 static struct response handle_setup_transaction(uint16_t data_length) {
     if (data_length != 8) {
@@ -152,24 +157,40 @@ static struct response handle_in_transaction() {
     } else {
         // this is the status stage of an out control transfer
 
+        struct response response;
         switch (setup_data.bRequest) {
             case BREQUEST_SET_ADDRESS:
                 // has to be done in the setup stage, unlike other transfers
                 device_address = setup_data.wValue;
+                response = RESPONSE_DATA(0);
                 break;
             case BREQUEST_SET_CONFIGURATION:
                 if (setup_data.wValue <= 1) {
                     bConfigurationValue = setup_data.wValue;
+                    response = RESPONSE_DATA(0);
                 } else {
-                    return (struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_STALL };
+                    response = RESPONSE_STALL;
                 }
                 break;
+            case BREQUEST_CLEAR_FEATURE:
+                response = RESPONSE_STALL;
+                break;
+            case BREQUEST_SET_DESCRIPTOR:
+                response = RESPONSE_STALL;
+                break;
+            case BREQUEST_SET_FEATURE:
+                response = RESPONSE_STALL;
+                break;
+            case BREQUEST_SET_INTERFACE:
+                response = RESPONSE_STALL;
+                break;
             default:
+                response = RESPONSE_STALL;
                 break;
         }
 
         in_control_transfer = false;
-        return (struct response){ RESPONSE_TYPE_DATA, 0 };
+        return response;
     }
 }
 
