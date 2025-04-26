@@ -1,4 +1,5 @@
 #include "cpulib.h"
+#include <assert.h>
 #include <stdio.h>
 
 enum bRequest : uint8_t {
@@ -79,17 +80,17 @@ extern volatile uint8_t usb_data_buffer[1023];
  * writing to this signals to the gateware to continue
  */
 extern volatile uint32_t usb_control;
-
 static bool in_control_transfer;
 static struct setup_data setup_data;
 
 static uint8_t device_address = 0;
+static uint8_t bConfigurationValue = 0;
 static struct bConfiguration configuration = {
     sizeof(configuration),
     DESCRIPTOR_TYPE_CONFIGURATION,
     sizeof(configuration),
     1,
-    0,
+    1,
     0,
     0b10000000,
     0 // TODO come up with a real number for this
@@ -123,7 +124,7 @@ static struct response handle_out_transaction(uint16_t data_length) {
         return (struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_NAK };
     }
 
-    if (setup_data.bmRequestType & (1 << 7)) {
+    if ((setup_data.bmRequestType & (1 << 7)) == 0x80) {
         // in the status stage of an IN control transfer
         return (struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_ACK };
     } else {
@@ -142,7 +143,7 @@ static struct response handle_in_transaction() {
         // this is a data stage of an in control transfer
         switch (setup_data.bRequest) {
             case BREQUEST_GET_CONFIGURATION:
-                usb_data_buffer[0] = configuration.bConfigurationValue;
+                usb_data_buffer[0] = bConfigurationValue;
                 return (struct response){ RESPONSE_TYPE_DATA, 1 };
             default:
                 // TODO return some kind of bad handshake
@@ -151,9 +152,20 @@ static struct response handle_in_transaction() {
     } else {
         // this is the status stage of an out control transfer
 
-        // needed because setting the address needs to be delayed until the status stage
-        if (setup_data.bRequest == BREQUEST_SET_ADDRESS) {
-            device_address = setup_data.wValue;
+        switch (setup_data.bRequest) {
+            case BREQUEST_SET_ADDRESS:
+                // has to be done in the setup stage, unlike other transfers
+                device_address = setup_data.wValue;
+                break;
+            case BREQUEST_SET_CONFIGURATION:
+                if (setup_data.wValue <= 1) {
+                    bConfigurationValue = setup_data.wValue;
+                } else {
+                    return (struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_STALL };
+                }
+                break;
+            default:
+                break;
         }
 
         in_control_transfer = false;
@@ -209,6 +221,8 @@ void handle_usb_transaction() {
         case RESPONSE_TYPE_DATA:
             result_usb_control |= response.data_length & 0x3ff;
             break;
+        default:
+            assert(false);
     }
 
     usb_control = result_usb_control;

@@ -2,6 +2,8 @@
 
 #define CLOCK_FREQUENCY 12000000
 
+#define simulation_fail() __asm__(".insn 0xcc000073");
+
 enum mcause {
     MCAUSE_ILLEGAL_INSTRUCTION = 2,
     MCAUSE_BREAKPOINT = 3,
@@ -23,6 +25,5 @@ void clear_usb_interrupt();
 void handle_usb_transaction();
 
 void pass();
-void fail();
 void simulation_print(const char*);
 void simulation_putc(char);
