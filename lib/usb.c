@@ -131,6 +131,7 @@ static struct response handle_out_transaction(uint16_t data_length) {
 
     if ((setup_data.bmRequestType & (1 << 7)) == 0x80) {
         // in the status stage of an IN control transfer
+        in_control_transfer = false;
         return (struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_ACK };
     } else {
         // in the data stage of an OUT control transfer
