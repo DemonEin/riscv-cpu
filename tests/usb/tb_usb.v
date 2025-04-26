@@ -58,6 +58,15 @@ module tb_usb();
 
         set_device_address(1);
         do_control_transfer(
+            8'b00000000,
+            BREQUEST_SET_CONFIGURATION,
+            1,
+            0,
+            0,
+            data_list,
+            data_list_length
+        );
+        do_control_transfer(
             8'b10000000,
             BREQUEST_GET_CONFIGURATION,
             0,
@@ -67,6 +76,7 @@ module tb_usb();
             data_list_length
         );
         if (data_list_length != 1) $stop;
+        if (data_list[0] != 1) $stop;
         #10ms
 
         $finish;

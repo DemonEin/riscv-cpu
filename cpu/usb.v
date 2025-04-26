@@ -24,6 +24,10 @@ module usb(
     input [31:0] usb_control,
     output wire [31:0] set_usb_control
 );
+    reg [9:0] set_usb_control_data_length;
+    reg [6:0] set_usb_control_address;
+    reg [3:0] set_usb_control_endpoint;
+    reg [1:0] set_usb_control_token;
     // assigning this doesn't work sometimes when in the port connection,
     // so do it here even though I don't know why that wasn't working
     assign set_usb_control = {
@@ -98,13 +102,17 @@ module usb(
     reg next_send_eop;
     reg [6:0] next_current_transaction_address;
     reg [3:0] next_current_transaction_endpoint;
-    reg [9:0] set_usb_control_data_length;
-    reg [6:0] set_usb_control_address;
-    reg [3:0] set_usb_control_endpoint;
-    reg [1:0] set_usb_control_token;
+    reg [9:0] next_set_usb_control_data_length;
+    reg [6:0] next_set_usb_control_address;
+    reg [3:0] next_set_usb_control_endpoint;
+    reg [1:0] next_set_usb_control_token;
     reg next_data_sync_bit;
     reg [4:0] next_token_crc;
     reg [15:0] next_data_crc;
+    reg [31:0] next_data_buffer_write_value;
+    reg [7:0] next_data_buffer_address;
+    reg next_got_usb_packet;
+    reg next_write_to_data_buffer;
 
     always @* begin
         next_top_state = top_state;
@@ -115,7 +123,7 @@ module usb(
         next_previous_data = previous_data;
         next_read_write_buffer = read_write_buffer;
         next_stall_counter = stall_counter;
-        next_pending_load = 0;
+        next_pending_load = pending_load;
         next_words_read_written = words_read_written;
         next_transaction_state = transaction_state;
         next_current_transaction_pid = current_transaction_pid;
@@ -127,15 +135,14 @@ module usb(
         next_data_sync_bit = data_sync_bit;
         next_token_crc = token_crc;
         next_data_crc = data_crc;
-
-        got_usb_packet = 0;
-        data_buffer_address = 8'bx;
-        data_buffer_write_value = 32'bx;
-        write_to_data_buffer = 0;
-        set_usb_control_data_length = 10'bx;
-        set_usb_control_address = 7'bx;
-        set_usb_control_endpoint = 4'bx;
-        set_usb_control_token = 2'bx;
+        next_data_buffer_write_value = data_buffer_write_value;
+        next_data_buffer_address = data_buffer_address;
+        next_got_usb_packet = got_usb_packet;
+        next_write_to_data_buffer = write_to_data_buffer;
+        next_set_usb_control_data_length = set_usb_control_data_length;
+        next_set_usb_control_address = set_usb_control_address;
+        next_set_usb_control_endpoint = set_usb_control_endpoint;
+        next_set_usb_control_token = set_usb_control_token;
 
         case (top_state)
             TOP_STATE_POWERED: begin
@@ -180,9 +187,9 @@ module usb(
                         // to override other values
                         got_bit();
                     end
-                end
-
-                if (pending_load) begin
+                end else if (pending_load) begin
+                    // the way pending_load works requires the load to be
+                    // performed in at most 3 48mhz periods
                     next_read_write_buffer = data_buffer_read_value;
                 end
             end
@@ -254,7 +261,12 @@ module usb(
     wire [3:0] usb_control_handshake_pid = { usb_control[22:21], 2'b10 };
 
     task got_bit();
+        // reset the registers that should only be 1 for a single input bit
+        next_got_usb_packet = 0;
+        next_write_to_data_buffer = 0;
+        next_pending_load = 0;
         next_send_eop = 0;
+
         if (read_write_bits_count > 0) begin
             next_read_write_bits_count = read_write_bits_count - 1;
         end
@@ -349,12 +361,12 @@ module usb(
                                 next_data_sync_bit = 0;
                             end
                         end else if (current_transaction_pid == PID_IN) begin
-                            got_usb_packet = 1;
+                            next_got_usb_packet = 1;
                             next_pending_send  = PENDING_SEND_ANY;
                             next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
-                            set_usb_control_address = next_current_transaction_address;
-                            set_usb_control_endpoint = next_current_transaction_endpoint;
-                            set_usb_control_token = current_transaction_pid[3:2];
+                            next_set_usb_control_address = next_current_transaction_address;
+                            next_set_usb_control_endpoint = next_current_transaction_endpoint;
+                            next_set_usb_control_token = current_transaction_pid[3:2];
                         end else begin
                             // this is an internal error, should never happen
                             `ifdef simulation
@@ -377,19 +389,19 @@ module usb(
                         if (words_read_written < 256) begin
                             // read_write_bits_count - 1 is the number of bits that would still
                             // need to be read to get a whole word
-                            data_buffer_write_value = read_bits >> (read_write_bits_count - 1);
-                            data_buffer_address = words_read_written[7:0];
-                            write_to_data_buffer = 1;
+                            next_data_buffer_write_value = read_bits >> (read_write_bits_count - 1);
+                            next_data_buffer_address = words_read_written[7:0];
+                            next_write_to_data_buffer = 1;
                         end
                         next_data_sync_bit = !data_sync_bit;
                         // 33 - read_write_bits_count is the number of bits that have been read on this word
                         // need to set all of it here
                         // - 2 because of the two crc bytes
-                        set_usb_control_data_length = (words_read_written * 4) + ((33 - { 4'b0, read_write_bits_count }) / 8) - 2;
-                        set_usb_control_address = current_transaction_address;
-                        set_usb_control_endpoint = current_transaction_endpoint;
-                        set_usb_control_token = current_transaction_pid[3:2];
-                        got_usb_packet = 1;
+                        next_set_usb_control_data_length = (words_read_written * 4) + ((33 - { 4'b0, read_write_bits_count }) / 8) - 2;
+                        next_set_usb_control_address = current_transaction_address;
+                        next_set_usb_control_endpoint = current_transaction_endpoint;
+                        next_set_usb_control_token = current_transaction_pid[3:2];
+                        next_got_usb_packet = 1;
                         next_pending_send = PENDING_SEND_ANY;
                         next_packet_state = PACKET_STATE_FINISH;
                     end else begin
@@ -404,9 +416,9 @@ module usb(
                     // words_read_written can be greater than 255 because of the two crc
                     // bytes after the data payload but these don't need to be written
                     if (words_read_written < 256) begin
-                        data_buffer_write_value = read_bits;
-                        data_buffer_address = words_read_written[7:0];
-                        write_to_data_buffer = 1;
+                        next_data_buffer_write_value = read_bits;
+                        next_data_buffer_address = words_read_written[7:0];
+                        next_write_to_data_buffer = 1;
                     end
                     next_words_read_written = words_read_written + 1;
                     next_read_write_bits_count = 32;
@@ -492,7 +504,7 @@ module usb(
                     if (usb_control[9:0] > 0) begin // data length
                         next_pending_load = 1;
                         next_words_read_written = 0;
-                        data_buffer_address = 0;
+                        next_data_buffer_address = 0;
                         next_read_write_bits_count = bytes_to_read_write_bit_count(usb_control[9:0]);
                         next_data_crc = ~0;
                         next_packet_state = PACKET_STATE_WRITE_DATA;
@@ -512,7 +524,7 @@ module usb(
                                                                                // guaranteed to greater than next_words_written * 4
                                                                                // because 4 bytes are always written if there
                                                                                // are 4 bytes available
-                        data_buffer_address = next_words_read_written[7:0];
+                        next_data_buffer_address = next_words_read_written[7:0];
                         next_pending_load = 1; // needed because reads from memory are delayed one clock cycle
                                                // (of the module input clock, not a bit time)
                         next_read_write_bits_count = bytes_to_read_write_bit_count(usb_control[9:0] - (next_words_read_written * 4));
@@ -567,6 +579,14 @@ module usb(
         data_sync_bit <= next_data_sync_bit;
         token_crc <= next_token_crc;
         data_crc <= next_data_crc;
+        data_buffer_write_value <= next_data_buffer_write_value;
+        data_buffer_address <= next_data_buffer_address;
+        set_usb_control_data_length <= next_set_usb_control_data_length;
+        set_usb_control_address <= next_set_usb_control_address;
+        set_usb_control_endpoint <= next_set_usb_control_endpoint;
+        set_usb_control_token <= next_set_usb_control_token;
+        got_usb_packet <= next_got_usb_packet;
+        write_to_data_buffer <= next_write_to_data_buffer;
 
         if (se0) begin
             reset_counter <= reset_counter + 1;

@@ -35,7 +35,6 @@ module top(
     // wires for module output
     wire [31:0] memory_address,
         unshifted_memory_write_value,
-        usb_data_buffer_read_value,
         usb_module_usb_data_buffer_write_value,
         next_program_counter;
     wire [2:0] unshifted_memory_write_sections;
@@ -48,11 +47,29 @@ module top(
     core core(clk24, next_program_counter, program_memory_value, memory_address, unshifted_memory_write_value, unshifted_memory_write_sections, memory_read_value, usb_packet_ready, handled_usb_packet, mip_mtip);
     usb usb(clk48, usb_d_p, usb_d_n, usb_pullup, got_usb_packet, usb_data_buffer_address, usb_data_buffer_read_value, usb_module_usb_data_buffer_write_value, write_to_usb_data_buffer, usb_packet_ready, usb_control, usb_usb_control);
 
-    // continuously assigned wires
-    wire [3:0] usb_data_buffer_write_sections = addressing_usb_data_buffer ? memory_write_sections : write_to_usb_data_buffer ? 4'b1111 : 0;
+    // continuously assigned wires and wire-like regs
+    reg [3:0] usb_data_buffer_write_sections;
     wire [3:0] memory_write_sections = { {2{unshifted_memory_write_sections[2]}}, unshifted_memory_write_sections[1:0] } << memory_address[1:0];
 
-    wire [31:0] unshifted_memory_read_value = read_memory_mapped_register ? memory_mapped_register_read_value : block_ram_read_value;
+    reg [31:0] unshifted_memory_read_value;
+    always @* begin
+        if (read_usb_data_buffer) begin
+            unshifted_memory_read_value = usb_data_buffer_read_value;
+        end else if (read_memory_mapped_register) begin
+            unshifted_memory_read_value = memory_mapped_register_read_value;
+        end else begin
+            unshifted_memory_read_value = block_ram_read_value;
+        end
+
+        if (usb_packet_ready) begin
+            // core owns the usb data buffer
+            usb_data_buffer_write_sections = addressing_usb_data_buffer ? memory_write_sections : 0;
+        end else begin
+            // usb module owns the usb data buffer
+            usb_data_buffer_write_sections = write_to_usb_data_buffer ? 4'b1111 : 0;
+        end
+    end
+
     // these shifts work due to requiring natural alignment of memory accesses
     wire [31:0] memory_read_value = unshifted_memory_read_value >> (pending_read_shift * 8);
     wire [31:0] memory_write_value = unshifted_memory_write_value << (memory_address[1:0] * 8);
@@ -78,12 +95,20 @@ module top(
     reg [1:0] pending_read_shift;
     reg led_on = 0;
     reg read_memory_mapped_register;
+    reg read_usb_data_buffer;
+    reg [31:0] usb_data_buffer_read_value;
 
     always @(posedge clk24) begin
         program_memory_value <= memory[next_program_counter[13:2]];
         // needs to be shifted for non-32 bit aligned reads, but that can't be
         // done in this block because the synthesizer has trouble with it
         block_ram_read_value <= memory[memory_address[13:2]];
+        usb_data_buffer_read_value <= usb_data_buffer[usb_packet_ready
+            ? memory_address[9:2]
+            : usb_data_buffer_address
+        ];
+
+        read_usb_data_buffer <= 0;
         case (memory_address[31:2])
             ADDRESS_MTIME[31:2]: begin
                 memory_mapped_register_read_value <= mtime[31:0];
@@ -110,13 +135,11 @@ module top(
                 read_memory_mapped_register <= 1;
             end
             default: begin
+                memory_mapped_register_read_value <= 32'bx;
+                read_memory_mapped_register <= 0;
+
                 if (addressing_usb_data_buffer) begin
-                    // the usb packet buffer isn't a register but whatever
-                    memory_mapped_register_read_value <= usb_data_buffer[memory_address[9:2]];
-                    read_memory_mapped_register <= 1;
-                end else begin
-                    memory_mapped_register_read_value <= 32'bx;
-                    read_memory_mapped_register <= 0;
+                    read_usb_data_buffer <= 1;
                 end
             end
         endcase
@@ -134,6 +157,43 @@ module top(
             end
             if (memory_write_sections[3]) begin
                 memory[memory_address[13:2]][31:24] <= memory_write_value[31:24];
+            end
+        end
+
+        if (usb_data_buffer_write_sections[0]) begin
+            usb_data_buffer[usb_address][7:0] <= usb_data_buffer_write_value[7:0];
+        end
+        if (usb_data_buffer_write_sections[1]) begin
+            usb_data_buffer[usb_address][15:8] <= usb_data_buffer_write_value[15:8];
+        end
+        if (usb_data_buffer_write_sections[2]) begin
+            usb_data_buffer[usb_address][23:16] <= usb_data_buffer_write_value[23:16];
+        end
+        if (usb_data_buffer_write_sections[3]) begin
+            usb_data_buffer[usb_address][31:24] <= usb_data_buffer_write_value[31:24];
+        end
+
+        if (usb_packet_ready) begin
+            if (memory_address[31:2] == ADDRESS_USB_CONTROL[31:2] && memory_write_sections != 0) begin
+                usb_packet_ready <= 0;
+
+                if (memory_write_sections[0]) begin
+                    usb_control[7:0] <= memory_write_value[7:0];
+                end
+                if (memory_write_sections[1]) begin
+                    usb_control[15:8] <= memory_write_value[15:8];
+                end
+                if (memory_write_sections[2]) begin
+                    usb_control[23:16] <= memory_write_value[23:16];
+                end
+                if (memory_write_sections[3]) begin
+                    usb_control[31:24] <= memory_write_value[31:24];
+                end
+            end
+        end else begin
+            if (got_usb_packet) begin
+                usb_packet_ready <= 1;
+                usb_control <= usb_usb_control;
             end
         end
 
@@ -210,41 +270,6 @@ module top(
     reg usb_packet_ready = 0; // 1 means the core owns the buffer, 0 means the usb
                               // module owns the buffer
     reg [31:0] usb_control;
-
-    always @(posedge clk48) begin
-        if (usb_data_buffer_write_sections[0]) begin
-            usb_data_buffer[usb_address][7:0] <= usb_data_buffer_write_value[7:0];
-        end
-        if (usb_data_buffer_write_sections[1]) begin
-            usb_data_buffer[usb_address][15:8] <= usb_data_buffer_write_value[15:8];
-        end
-        if (usb_data_buffer_write_sections[2]) begin
-            usb_data_buffer[usb_address][23:16] <= usb_data_buffer_write_value[23:16];
-        end
-        if (usb_data_buffer_write_sections[3]) begin
-            usb_data_buffer[usb_address][31:24] <= usb_data_buffer_write_value[31:24];
-        end
-
-        if (got_usb_packet) begin
-            usb_packet_ready <= 1;
-            usb_control <= usb_usb_control;
-        end else if (memory_address[31:2] == ADDRESS_USB_CONTROL[31:2] && memory_write_sections != 0) begin
-            usb_packet_ready <= 0;
-
-            if (memory_write_sections[0]) begin
-                usb_control[7:0] <= memory_write_value[7:0];
-            end
-            if (memory_write_sections[1]) begin
-                usb_control[15:8] <= memory_write_value[15:8];
-            end
-            if (memory_write_sections[2]) begin
-                usb_control[23:16] <= memory_write_value[23:16];
-            end
-            if (memory_write_sections[3]) begin
-                usb_control[31:24] <= memory_write_value[31:24];
-            end
-        end
-    end
 
     // nextpnr reports this as a 12 mhz clock; this is a bug in nextpnr,
     // I confirmed on hardware that the observed clock is 24 mhz
