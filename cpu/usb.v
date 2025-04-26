@@ -260,6 +260,8 @@ module usb(
     wire write_complete = read_write_bits_count == 1;
     wire [3:0] usb_control_handshake_pid = { usb_control[22:21], 2'b10 };
 
+    reg [4:0] i; 
+
     task got_bit();
         // reset the registers that should only be 1 for a single input bit
         next_got_usb_packet = 0;
@@ -530,7 +532,7 @@ module usb(
                         next_read_write_bits_count = bytes_to_read_write_bit_count(usb_control[9:0] - (next_words_read_written * 4));
                     end else begin
                         // reverse and negate crc bits
-                        for (reg [4:0] i = 0; i < 16; i = i + 1) begin
+                        for (i = 0; i < 16; i = i + 1) begin
                             // use next_data_crc instead of data_crc because I need to include the current bit
                             next_read_write_buffer[i] = !next_data_crc[15 - i];
                         end
