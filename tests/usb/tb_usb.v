@@ -165,40 +165,24 @@ module tb_usb();
     endtask
 
 
-    reg [7:0] receive_data_data[1026];
-    reg [15:0] data_crc;
+    reg [3:0] receive_data_pid;
     task receive_data(input [3:0] pid, output [7:0] data[1023], output [31:0] byte_count);
-        $display("waiting to receive data packet");
-        receive_packet(receive_data_data, byte_count);
-        if (!(byte_count >= 3 && receive_data_data[0] == { ~pid, pid })) begin
-            $stop("did not receive data");
-        end
+        receive_packet(receive_data_pid, data, byte_count);
 
-        // verify crc
-        data_crc = ~0;
-        for (reg [31:0] bit_index = 8; bit_index < byte_count * 8; bit_index = bit_index + 1) begin
-            data_crc = data_crc[15] ^ receive_data_data[bit_index / 8][bit_index % 8]
-                    ? (data_crc << 1) ^ 16'b1000000000000101
-                    : (data_crc << 1);
-        end
-        if (data_crc != 16'b1000000000001101) begin
-            $display("data packet received with invalid crc, %h", data_crc);
+        if (receive_data_pid != pid) begin
+            $display("received incorrect pid for data packet: %b", receive_data_pid);
             $stop;
-        end
-
-        byte_count = byte_count - 3;
-        for (reg [31:0] i = 0; i < byte_count; i = i + 1) begin
-            data[i] = receive_data_data[i + 1];
         end
     endtask
 
 
-    reg [7:0] receive_ack_data[1026];
+    reg [7:0] receive_ack_data[1023];
     reg [31:0] receive_ack_data_length;
+    reg [3:0] receive_ack_pid;
     task receive_ack();
         $display("waiting to receive ack packet");
-        receive_packet(receive_ack_data, receive_ack_data_length);
-        if (!(receive_ack_data_length == 1 && receive_ack_data[0] == { ~PID_ACK, PID_ACK })) begin
+        receive_packet(receive_ack_pid, receive_ack_data, receive_ack_data_length);
+        if (receive_ack_pid != PID_ACK) begin
             $display("did not receive ack");
             $stop;
         end
@@ -305,10 +289,14 @@ module tb_usb();
         #FULL_SPEED_PERIOD;
     endtask
 
+    reg [7:0] raw_data[1026];
+    reg [15:0] data_crc;
     reg [31:0] received_bit_count;
     reg nzri_decoded_bit;
     reg [31:0] receive_timeout;
-    task receive_packet(output [7:0] data[1026], output[31:0] byte_count);
+    // receives packet and verifies all token lengths and checksums
+    // data and byte_count are only defined for data packets
+    task receive_packet(output [3:0] pid, output [7:0] data[1023], output[31:0] byte_count);
         // receive sync pattern
         // assume starting in idle or eop state
         receive_timeout = 477707; // 10 milliseconds of FULL_SPEED_PERIOD
@@ -339,7 +327,7 @@ module tb_usb();
             nzri_decoded_bit = !(data_wire ^ previous_data);
 
             if (consecutive_decoded_ones < 6) begin
-                data[received_bit_count / 8][received_bit_count % 8] = nzri_decoded_bit;
+                raw_data[received_bit_count / 8][received_bit_count % 8] = nzri_decoded_bit;
                 received_bit_count = received_bit_count + 1;
             end
 
@@ -368,6 +356,61 @@ module tb_usb();
         // wait twice for the standard inter-packet delay
         #FULL_SPEED_PERIOD;
         #FULL_SPEED_PERIOD;
+
+        // at this point raw_data contains the raw_data and byte_count
+        // contains the raw byte count
+
+        if (raw_data[0][3:0] != ~raw_data[0][7:4]) begin
+            $display("received invalid pid checksum");
+            $stop;
+        end
+
+        pid = raw_data[0][3:0];
+
+        case (pid[1:0])
+            0'b00: begin
+                // special pid
+                $display("no test support for special packets");
+                $stop;
+            end
+            0'b01: begin
+                // token pid
+                $display("no test support for token packets");
+                $stop;
+            end
+            0'b10: begin
+                // handshake pid
+                if (byte_count != 1) begin
+                    $display("received handshake packet with %b bytes", byte_count);
+                    $stop;
+                end
+            end
+            0'b11: begin
+                // data pid
+
+                if (byte_count < 3) begin
+                    $display("received only %d bytes in data packet", byte_count);
+                    $stop;
+                end
+
+                // verify crc
+                data_crc = ~0;
+                for (reg [31:0] bit_index = 8; bit_index < byte_count * 8; bit_index = bit_index + 1) begin
+                    data_crc = data_crc[15] ^ raw_data[bit_index / 8][bit_index % 8]
+                            ? (data_crc << 1) ^ 16'b1000000000000101
+                            : (data_crc << 1);
+                end
+                if (data_crc != 16'b1000000000001101) begin
+                    $display("data packet received with invalid crc, %h", data_crc);
+                    $stop;
+                end
+
+                byte_count = byte_count - 3;
+                for (reg [31:0] i = 0; i < byte_count; i = i + 1) begin
+                    data[i] = raw_data[i + 1];
+                end
+            end
+        endcase
     endtask
 
     task send_bit(input value);
