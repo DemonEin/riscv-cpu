@@ -1,4 +1,6 @@
-localparam MEMORY_SIZE = 4096; // in 4-byte words
+localparam MEMORY_SIZE = 32'h10000; // in bytes
+
+localparam MEMORY_ADDRESS_TOP_INDEX = $clog2(MEMORY_SIZE) - 1;
 
 localparam ADDRESS_MTIME = 32'h80000000;
 localparam ADDRESS_MTIMEH = ADDRESS_MTIME + 4;
@@ -85,7 +87,7 @@ module top(
 
     // stateful regs written in the following block
     (* ram_style = "block" *)
-    reg [31:0] memory[MEMORY_SIZE - 1:0];
+    reg [31:0] memory[MEMORY_SIZE / 4 - 1:0];
     initial $readmemh(`MEMORY_FILE, memory);
 
     reg [31:0] program_memory_value,
@@ -99,10 +101,10 @@ module top(
     reg [31:0] usb_data_buffer_read_value;
 
     always @(posedge clk24) begin
-        program_memory_value <= memory[next_program_counter[13:2]];
+        program_memory_value <= memory[next_program_counter[MEMORY_ADDRESS_TOP_INDEX:2]];
         // needs to be shifted for non-32 bit aligned reads, but that can't be
         // done in this block because the synthesizer has trouble with it
-        block_ram_read_value <= memory[memory_address[13:2]];
+        block_ram_read_value <= memory[memory_address[MEMORY_ADDRESS_TOP_INDEX:2]];
         usb_data_buffer_read_value <= usb_data_buffer[usb_packet_ready
             ? memory_address[9:2]
             : usb_data_buffer_address
@@ -145,18 +147,18 @@ module top(
         endcase
         pending_read_shift <= memory_address[1:0];
 
-        if (memory_address < MEMORY_SIZE * 4) begin
+        if (memory_address < MEMORY_SIZE) begin
             if (memory_write_sections[0]) begin
-                memory[memory_address[13:2]][7:0] <= memory_write_value[7:0];
+                memory[memory_address[MEMORY_ADDRESS_TOP_INDEX:2]][7:0] <= memory_write_value[7:0];
             end
             if (memory_write_sections[1]) begin
-                memory[memory_address[13:2]][15:8] <= memory_write_value[15:8];
+                memory[memory_address[MEMORY_ADDRESS_TOP_INDEX:2]][15:8] <= memory_write_value[15:8];
             end
             if (memory_write_sections[2]) begin
-                memory[memory_address[13:2]][23:16] <= memory_write_value[23:16];
+                memory[memory_address[MEMORY_ADDRESS_TOP_INDEX:2]][23:16] <= memory_write_value[23:16];
             end
             if (memory_write_sections[3]) begin
-                memory[memory_address[13:2]][31:24] <= memory_write_value[31:24];
+                memory[memory_address[MEMORY_ADDRESS_TOP_INDEX:2]][31:24] <= memory_write_value[31:24];
             end
         end
 

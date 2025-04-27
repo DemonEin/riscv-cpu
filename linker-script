@@ -3,7 +3,7 @@ usb_control = 0x80000014;
 usb_data_buffer = 0xc0000000;
 
 MEMORY {
-    sram (wx) : ORIGIN = 0, LENGTH = 0x4000
+    sram (wx) : ORIGIN = 0, LENGTH = 0x10000
 }
 
 ENTRY(_start)
