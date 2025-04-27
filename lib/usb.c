@@ -1,6 +1,11 @@
 #include "cpulib.h"
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
+
+static int min(int x, int y) {
+    return x < y ? x : y;
+}
 
 enum bRequest : uint8_t {
     BREQUEST_GET_STATUS = 0,
@@ -33,7 +38,26 @@ struct setup_data {
     uint16_t wLength;
 };
 
-struct bConfiguration {
+struct device_descriptor {
+    uint8_t bLength;
+    enum bDescriptorType bDescriptorType;
+    uint16_t bcdUSB;
+    uint8_t bDeviceClass;
+    uint8_t bDeviceSubClass;
+    uint8_t bDeviceProtocol;
+    uint8_t bMaxPacketSize0;
+    uint16_t idVendor;
+    uint16_t idProduct;
+    uint16_t bcdDevice;
+    uint8_t iManufacturer;
+    uint8_t iProduct;
+    uint8_t iSerialNumber;
+    uint8_t bNumConfigurations;
+};
+// can't use sizeof because it includes padding at the end
+#define DEVICE_DESCRIPTOR_SIZE 18
+
+struct configuration_descriptor {
     uint8_t bLength;
     enum bDescriptorType bDescriptorType;
     uint16_t wTotalLength;
@@ -43,6 +67,20 @@ struct bConfiguration {
     uint8_t bmAttributes;
     uint8_t bMaxPower;
 };
+#define CONFIGURATION_DESCRIPTOR_SIZE 9
+
+struct interface_descriptor {
+    uint8_t bLength;
+    enum bDescriptorType bDescriptorType;
+    uint8_t bInterfaceNumber;
+    uint8_t bAlternateSetting;
+    uint8_t bNumEndpoints;
+    uint8_t bInterfaceClass;
+    uint8_t bInterfaceSubClass;
+    uint8_t bInterfaceProtocol;
+    uint8_t iInterface;
+};
+#define INTERFACE_DESCRIPTOR_SIZE 9
 
 enum token {
     TOKEN_OUT = 0b00,
@@ -55,6 +93,10 @@ enum handshake {
     HANDSHAKE_NAK = 0b10,
     HANDSHAKE_STALL = 0b11,
 };
+
+// maximum data payload size, 64 is the maximum for the
+// default control pipe
+#define MAX_PACKET_SIZE 64
 
 extern volatile uint8_t usb_data_buffer[1023];
 
@@ -82,18 +124,49 @@ extern volatile uint8_t usb_data_buffer[1023];
 extern volatile uint32_t usb_control;
 static bool in_control_transfer;
 static struct setup_data setup_data;
+static uint16_t data_bytes_sent;
 
 static uint8_t device_address = 0;
 static uint8_t bConfigurationValue = 0;
-static struct bConfiguration configuration = {
-    sizeof(configuration),
+
+static const struct device_descriptor device_descriptor = {
+    .bLength = DEVICE_DESCRIPTOR_SIZE,
+    .bDescriptorType = DESCRIPTOR_TYPE_DEVICE,
+    .bcdUSB = 0x0200, // indictes usb version 2.0.0
+    .bDeviceClass = 0xff, // vendor-specific device class
+    .bDeviceSubClass = 0,
+    .bDeviceProtocol = 0xff, // vender-specific protocol on a device basis
+    .bMaxPacketSize0 = MAX_PACKET_SIZE,
+    .idVendor = 0,
+    .idProduct = 0,
+    .bcdDevice = 0,
+    .iManufacturer = 0, // TODO add
+    .iProduct = 0, // TODO add
+    .iSerialNumber = 0, // TODO add
+    .bNumConfigurations = 0,
+};
+
+static const struct configuration_descriptor configuration = {
+    CONFIGURATION_DESCRIPTOR_SIZE,
     DESCRIPTOR_TYPE_CONFIGURATION,
-    sizeof(configuration),
+    CONFIGURATION_DESCRIPTOR_SIZE + INTERFACE_DESCRIPTOR_SIZE,
     1,
     1,
     0,
     0b10000000,
     0 // TODO come up with a real number for this
+};
+
+static const struct interface_descriptor interface = {
+    .bLength = INTERFACE_DESCRIPTOR_SIZE,
+    .bDescriptorType = DESCRIPTOR_TYPE_INTERFACE,
+    .bInterfaceNumber = 0,
+    .bAlternateSetting = 0,
+    .bNumEndpoints = 0,
+    .bInterfaceClass = 0xff, // vendor-specific
+    .bInterfaceSubClass = 0xff,
+    .bInterfaceProtocol = 0xff, //vendor-specific
+    .iInterface = 0,
 };
 
 struct response {
@@ -120,6 +193,7 @@ static struct response handle_setup_transaction(uint16_t data_length) {
     }
 
     in_control_transfer = true;
+    data_bytes_sent = 0;
     setup_data = *(volatile struct setup_data*)usb_data_buffer;
     return (struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_ACK };
 }
@@ -139,6 +213,49 @@ static struct response handle_out_transaction(uint16_t data_length) {
     return (struct response){ RESPONSE_TYPE_IGNORE, 0 };
 }
 
+static struct response send_device_descriptor() {
+    // send device descriptor (only)
+    const uint16_t total_transaction_bytes = min(setup_data.wLength, DEVICE_DESCRIPTOR_SIZE);
+    assert(data_bytes_sent <= total_transaction_bytes);
+    const uint16_t bytes_to_send_this_packet =
+        min(total_transaction_bytes - data_bytes_sent, MAX_PACKET_SIZE);
+
+    // casting away volatile, TODO check if that's ok, really this isn't written by anything else until
+    // the write to usb_control
+    memcpy(
+        (void*)usb_data_buffer,
+        (const uint8_t*)&device_descriptor + data_bytes_sent,
+        bytes_to_send_this_packet
+    );
+    data_bytes_sent += bytes_to_send_this_packet;
+    return RESPONSE_DATA(bytes_to_send_this_packet);
+}
+
+static struct response send_configuration() {
+    // send configuration and interface descriptors
+    const uint16_t total_transaction_bytes = min(setup_data.wLength, configuration.wTotalLength);
+    assert(data_bytes_sent <= total_transaction_bytes);
+    const uint16_t bytes_to_send_this_packet =
+        min(total_transaction_bytes - data_bytes_sent, MAX_PACKET_SIZE);
+
+    const uint16_t configuration_bytes_to_send = data_bytes_sent < CONFIGURATION_DESCRIPTOR_SIZE
+        ? min(bytes_to_send_this_packet, CONFIGURATION_DESCRIPTOR_SIZE - data_bytes_sent)
+        : 0;
+    const uint8_t interface_bytes_to_send = bytes_to_send_this_packet - configuration_bytes_to_send;
+    memcpy(
+        (void*)usb_data_buffer,
+        (const uint8_t*)&configuration + data_bytes_sent,
+        configuration_bytes_to_send
+    );
+    memcpy(
+        (uint8_t*)usb_data_buffer + configuration_bytes_to_send,
+        (const uint8_t*)&device_descriptor + (data_bytes_sent - CONFIGURATION_DESCRIPTOR_SIZE),
+        interface_bytes_to_send
+    );
+    data_bytes_sent += bytes_to_send_this_packet;
+    return RESPONSE_DATA(bytes_to_send_this_packet);
+}
+
 static struct response handle_in_transaction() {
     if (!in_control_transfer) {
         // TODO return some kind of bad handshake in the error case
@@ -151,6 +268,15 @@ static struct response handle_in_transaction() {
             case BREQUEST_GET_CONFIGURATION:
                 usb_data_buffer[0] = bConfigurationValue;
                 return (struct response){ RESPONSE_TYPE_DATA, 1 };
+            case BREQUEST_GET_DESCRIPTOR:
+                switch (setup_data.wValue >> 8) { // this is the descriptor type
+                    case DESCRIPTOR_TYPE_DEVICE:
+                        return send_device_descriptor();
+                    case DESCRIPTOR_TYPE_CONFIGURATION:
+                        return send_configuration();
+                    default:
+                        return RESPONSE_STALL;
+                }
             default:
                 // TODO return some kind of bad handshake
                 return (struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_STALL };

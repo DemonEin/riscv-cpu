@@ -57,6 +57,47 @@ module tb_usb();
         #10ms
 
         set_device_address(1);
+
+        do_control_transfer(
+            8'b10000000,
+            BREQUEST_GET_DESCRIPTOR,
+            DESCRIPTOR_TYPE_DEVICE << 8,
+            0,
+            18,
+            data_list,
+            data_list_length
+        );
+        if (data_list_length != 18) $stop;
+        if (data_list[0] != 18) $stop;
+        if (data_list[1] != DESCRIPTOR_TYPE_DEVICE) $stop;
+
+        do_control_transfer(
+            8'b10000000,
+            BREQUEST_GET_DESCRIPTOR,
+            DESCRIPTOR_TYPE_CONFIGURATION << 8,
+            0,
+            8,
+            data_list,
+            data_list_length
+        );
+        if (data_list_length != 8) $stop;
+        if (data_list[0] != 9) $stop;
+        if (data_list[1] != DESCRIPTOR_TYPE_CONFIGURATION) $stop;
+
+        do_control_transfer(
+            8'b10000000,
+            BREQUEST_GET_DESCRIPTOR,
+            DESCRIPTOR_TYPE_CONFIGURATION << 8,
+            0,
+            64,
+            data_list,
+            data_list_length
+        );
+        if (data_list_length <= 9) $stop;
+        if (data_list[0] != 9) $stop;
+        if (data_list[1] != DESCRIPTOR_TYPE_CONFIGURATION) $stop;
+        if (data_list[2] <= 9) $stop;
+
         do_control_transfer(
             8'b00000000,
             BREQUEST_SET_CONFIGURATION,
@@ -241,7 +282,6 @@ module tb_usb();
     reg [31:0] consecutive_decoded_ones;
     reg input_bit;
     task send_packet(input [7:0] data[1026], input [31:0] byte_count);
-        $display("sending %d bytes", byte_count);
         write_enable = 1;
         // send sync pattern
         for (reg [3:0] i = 0; i < 8; i = i + 1) begin
