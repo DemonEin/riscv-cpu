@@ -18,9 +18,12 @@ testbench ?= $(current_directory)/tb_top.v
 target_directory := $(current_directory)target/$(shell realpath --relative-to $(current_directory) .)
 linker_script := $(current_directory)linker-script
 lib := $(current_directory)lib
-cpulib.o := $(current_directory)target/lib/cpulib.o
+lib_target_directory := $(current_directory)target/lib
+simulation_cpulib.o := $(lib_target_directory)/simulation/cpulib.o
+hardware_cpulib.o := $(lib_target_directory)/hardware/cpulib.o
 ifndef no_link_library
-	cpulib_argument := $(cpulib.o)
+	simulation_cpulib_argument := $(simulation_cpulib.o)
+	hardware_cpulib_argument := $(hardware_cpulib.o)
 endif
 
 picolibc_configure_directory := $(current_directory)target/lib/picolibc/configure
@@ -30,38 +33,66 @@ libc_headers := $(picolibc_install_directory)/include
 
 .NOTINTERMEDIATE:
 
-%/verilator/sim: $(testbench) %/memory.hex %/entry.txt $(needed_verilog_files)
-	verilator $(VERILATOR_OPTIONS) +define+simulation +define+INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) +define+MEMORY_FILE=\"$*/memory.hex\" --binary -j 0 $(testbench) -Mdir $(@D) -o $(@F)
+$(target_directory)/verilator/sim: $(testbench) $(target_directory)/simulation/memory.hex $(target_directory)/simulation/entry.txt $(needed_verilog_files)
+	verilator $(VERILATOR_OPTIONS) \
+		+define+simulation \
+		+define+INITIAL_PROGRAM_COUNTER=$$(cat $(target_directory)/simulation/entry.txt) \
+		+define+MEMORY_FILE=\"$(target_directory)/simulation/memory.hex\" \
+		--binary \
+		-j 0 \
+		$(testbench) \
+		-Mdir $(@D) \
+		-o $(@F)
 
-%/a.out: $(program_files) $(cpulib_argument) $(linker_script) $(libc_headers) $(libc.a) | %
-	$(gcc_binary_prefix)gcc \
-		$(GCC_OPTIONS) \
-		-I $(current_directory) \
-		-T $(linker_script) \
-		-nostdlib \
-		-o $@ \
-		$(program_files) \
-		$(cpulib_argument) \
-		-I$(libc_headers) \
-		$(libc.a) \
-		-lgcc \
-		-Os \
-		-ggdb
+binary_prerequisites = $(program_files) $(cpulib_argument) $(linker_script) $(libc_headers) $(libc.a)
+binary_build_command = $(gcc_binary_prefix)gcc \
+                               $(GCC_OPTIONS) \
+                               -I $(current_directory) \
+                               -T $(linker_script) \
+                               -nostdlib \
+                               -o $@ \
+                               $(program_files) \
+                               $(cpulib_argument) \
+                               -I$(libc_headers) \
+                               $(libc.a) \
+                               -lgcc \
+                               -Os \
+                               -ggdb
 
-%/memory.bin %/entry.txt &: %/a.out
+cpulib_argument := $(simulation_cpulib_argument)
+$(target_directory)/simulation/a.out: $(binary_prerequisites) | $(target_directory)/simulation
+	$(binary_build_command)
+
+cpulib_argument := $(hardware_cpulib_argument)
+$(target_directory)/hardware/a.out: $(binary_prerequisites) | $(target_directory)/hardware
+	$(binary_build_command)
+
+%/memory.bin %/entry.txt &: %/a.out | %
 	cargo run --manifest-path $(current_directory)loader/Cargo.toml -- \
 		--memory $*/memory.bin --entry $*/entry.txt $<
 
-%.hex: %.bin
+%/memory.hex: %/memory.bin | %
 	hexdump -v -e '/4 "%x "' $< > $@
 
-$(cpulib.o): $(lib)/cpulib.h $(lib)/cpulib.c $(lib)/cpulib.s $(lib)/usb.c $(libc_headers) | $(current_directory)target/lib
-	$(gcc_binary_prefix)gcc $(GCC_OPTIONS) -r $(lib)/cpulib.c $(lib)/cpulib.s $(lib)/usb.c -I$(libc_headers) -o $@ -Os -ggdb
+cpulib_prerequisites := $(lib)/cpulib.h $(lib)/cpulib.c $(lib)/cpulib.s $(lib)/usb.c $(libc_headers)
+cpulib_build_command = $(gcc_binary_prefix)gcc \
+						$(GCC_OPTIONS) \
+						-r \
+						$(lib)/cpulib.c \
+						$(lib)/cpulib.s \
+						$(lib)/usb.c \
+						-I$(libc_headers) \
+						-o $@ \
+						-Os \
+						-ggdb
 
-$(target_directory):
-	mkdir -p $@
+$(simulation_cpulib.o): $(cpulib_prerequisites) | $(lib_target_directory)/simulation
+	$(cpulib_build_command) -D SIMULATION
 
-$(current_directory)target/lib:
+$(hardware_cpulib.o): $(cpulib_prerequisites) | $(lib_target_directory)/hardware
+	$(cpulib_build_command)
+
+$(target_directory) $(target_directory)/simulation $(target_directory)/hardware $(current_directory)target/lib/simulation $(current_directory)target/lib/hardware:
 	mkdir -p $@
 
 $(libc.a) $(libc_headers) &: $(lib)/picolibc
@@ -77,11 +108,11 @@ $(libc.a) $(libc_headers) &: $(lib)/picolibc
 		ninja && \
 		ninja install
 
-%/cpu.json: $(needed_verilog_files) %/memory.hex %/entry.txt
+$(target_directory)/cpu.json: $(needed_verilog_files) $(target_directory)/hardware/memory.hex $(target_directory)/hardware/entry.txt
 	@# run verilator --lint-only before building because yosys does not report many simple errors
-	INITIAL_PROGRAM_COUNTER=$$(cat $*/entry.txt) && \
-	verilator  --lint-only $(VERILATOR_OPTIONS) +define+INITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER +define+MEMORY_FILE='"$*/memory.hex"' top.v && \
-	yosys -p "read_verilog -DYOSYS -DINITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER -DMEMORY_FILE=\"$*/memory.hex\" $(needed_verilog_files); synth_ecp5 -json $@"
+	INITIAL_PROGRAM_COUNTER=$$(cat $(target_directory)/hardware/entry.txt) && \
+	verilator  --lint-only $(VERILATOR_OPTIONS) +define+INITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER +define+MEMORY_FILE='"$(target_directory)/hardware/memory.hex"' top.v && \
+	yosys -p "read_verilog -DYOSYS -DINITIAL_PROGRAM_COUNTER=$$INITIAL_PROGRAM_COUNTER -DMEMORY_FILE=\"$(target_directory)/hardware/memory.hex\" $(needed_verilog_files); synth_ecp5 -json $@"
 
 %.config: %.json $(current_directory)cpu/orangecrab.lpf
 	nextpnr-ecp5 --85k --package CSFBGA285 --lpf $(current_directory)cpu/orangecrab.lpf --json $< --textcfg $@
