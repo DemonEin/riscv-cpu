@@ -1,6 +1,5 @@
 #include "cpulib.h"
 #include <assert.h>
-#include <stdio.h>
 #include <string.h>
 
 static int min(int x, int y) {
@@ -188,29 +187,28 @@ struct response {
 
 static struct response handle_setup_transaction(uint16_t data_length) {
     if (data_length != 8) {
-        puts("got bad number of bytes for setup transaction");
-        return (struct response){ RESPONSE_TYPE_IGNORE, 0 };
+        return RESPONSE_IGNORE;
     }
 
     in_control_transfer = true;
     data_bytes_sent = 0;
     setup_data = *(volatile struct setup_data*)usb_data_buffer;
-    return (struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_ACK };
+    return RESPONSE_ACK;
 }
 
 static struct response handle_out_transaction(uint16_t data_length) {
     if (!in_control_transfer) {
-        return (struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_NAK };
+        return RESPONSE_NAK;
     }
 
     if ((setup_data.bmRequestType & (1 << 7)) == 0x80) {
         // in the status stage of an IN control transfer
         in_control_transfer = false;
-        return (struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_ACK };
+        return RESPONSE_ACK;
     } else {
         // in the data stage of an OUT control transfer
     }
-    return (struct response){ RESPONSE_TYPE_IGNORE, 0 };
+    return RESPONSE_IGNORE;
 }
 
 static struct response send_device_descriptor() {
@@ -258,8 +256,7 @@ static struct response send_configuration() {
 
 static struct response handle_in_transaction() {
     if (!in_control_transfer) {
-        // TODO return some kind of bad handshake in the error case
-        return (struct response){ RESPONSE_TYPE_IGNORE, 0 };
+        return RESPONSE_NAK;
     }
 
     if ((setup_data.bmRequestType & (1 << 7)) == 0x80) { // 0 is host-to-device, 1 is device-to-host
@@ -267,7 +264,7 @@ static struct response handle_in_transaction() {
         switch (setup_data.bRequest) {
             case BREQUEST_GET_CONFIGURATION:
                 usb_data_buffer[0] = bConfigurationValue;
-                return (struct response){ RESPONSE_TYPE_DATA, 1 };
+                return RESPONSE_DATA(1);
             case BREQUEST_GET_DESCRIPTOR:
                 switch (setup_data.wValue >> 8) { // this is the descriptor type
                     case DESCRIPTOR_TYPE_DEVICE:
@@ -278,8 +275,7 @@ static struct response handle_in_transaction() {
                         return RESPONSE_STALL;
                 }
             default:
-                // TODO return some kind of bad handshake
-                return (struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_STALL };
+                return RESPONSE_STALL;
         }
     } else {
         // this is the status stage of an out control transfer
@@ -340,8 +336,7 @@ static struct response handle_in_transaction() {
  */
 static struct response make_usb_response(const uint32_t usb_control_copy) {
     if (((usb_control_copy >> 10) & 0x7f) != device_address) {
-        puts("ignoring due to address");
-        return (struct response){ RESPONSE_TYPE_IGNORE, 0 };
+        return RESPONSE_IGNORE;
     }
 
     const unsigned int token = usb_control_copy >> 21 & 0b11;
@@ -352,8 +347,7 @@ static struct response make_usb_response(const uint32_t usb_control_copy) {
     } else if (token == TOKEN_IN) {
         return handle_in_transaction();
     } else {
-        puts("invalid token bits");
-        return (struct response){ RESPONSE_TYPE_IGNORE, 0 };
+        return RESPONSE_IGNORE;
     }
 }
 
