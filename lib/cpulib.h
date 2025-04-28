@@ -2,7 +2,12 @@
 
 #define CLOCK_FREQUENCY 12000000
 
-#define simulation_fail() __asm__(".insn 0xcc000073");
+#ifdef SIMULATION
+    #define simulation_pass() __asm__(".insn 0x8c000073"); // custom instruction to pass test
+    #define simulation_fail() __asm__(".insn 0xcc000073"); // custon instruction to fail test
+
+void simulation_putchar(char);
+#endif
 
 enum mcause {
     MCAUSE_ILLEGAL_INSTRUCTION = 2,
@@ -23,7 +28,3 @@ void enable_external_interrupts();
 
 void clear_usb_interrupt();
 void handle_usb_transaction();
-
-void pass();
-void simulation_print(const char*);
-void simulation_putc(char);

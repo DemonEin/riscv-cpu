@@ -59,7 +59,7 @@ localparam FUNC12_WFI = 12'b000100000101;
 `ifdef simulation
 localparam FUNC12_TEST_PASS = 12'b100011000000;
 localparam FUNC12_TEST_FAIL = 12'b110011000000;
-localparam FUNC12_SIMULATION_PRINT = 12'b000011000000;
+localparam FUNC12_SIMULATION_PUTCHAR = 12'b000011000000;
 `endif
 
 // the bit at index 3 is the bit at index 30 in the corresponding instruction
@@ -204,7 +204,7 @@ module core(
     `ifdef simulation
         reg finish;
         reg fail;
-        reg simulation_print;
+        reg simulation_putchar;
         reg illegal_instruction;
     `endif
 
@@ -243,7 +243,7 @@ module core(
         next_program_counter = program_counter;
 
         `ifdef simulation
-            simulation_print = 0;
+            simulation_putchar = 0;
         `endif
 
         if (load_register != 0) begin
@@ -428,8 +428,8 @@ module core(
                                         FUNC12_TEST_FAIL: begin
                                             fail = 1;
                                         end
-                                        FUNC12_SIMULATION_PRINT: begin
-                                            simulation_print = 1;
+                                        FUNC12_SIMULATION_PUTCHAR: begin
+                                            simulation_putchar = 1;
                                         end
                                     `endif
                                     default: begin
@@ -845,23 +845,8 @@ module core(
         end
 
         always @(posedge clock) begin
-            if (simulation_print) begin
-                // duplicating code in these two branches but whatever
-                if (registers.r[10] >= ADDRESS_USB_DATA_BUFFER && registers.r[10] < ADDRESS_USB_DATA_BUFFER + USB_DATA_BUFFER_SIZE) begin
-                    for (reg [31:0] i = registers.r[10]; // start at a0
-                            ((top.usb_data_buffer[i / 4] >> ((i % 4) * 8)) & 32'hFF) != 0;
-                            i = i + 1) begin
-                        // have to duplicate a complex expression but whatever
-                        $write("%u", (top.usb_data_buffer[i / 4] >> ((i % 4) * 8)) & 32'hFF);
-                    end
-                end else begin
-                    for (reg [31:0] i = registers.r[10]; // start at a0
-                            ((top.memory[i / 4] >> ((i % 4) * 8)) & 32'hFF) != 0;
-                            i = i + 1) begin
-                        // have to duplicate a complex expression but whatever
-                        $write("%u", (top.memory[i / 4] >> ((i % 4) * 8)) & 32'hFF);
-                    end
-                end
+            if (simulation_putchar) begin
+                $write("%u", registers.r[10][7:0]); // a0 as a char
                 $fflush(); // doesn't print immediately otherwise
             end
         end

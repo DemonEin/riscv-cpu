@@ -1,4 +1,5 @@
 #include "lib/cpulib.h"
+#include <assert.h>
 
 int main() {
     __asm__("csrrs zero, mstatus, (1 << 3)"); // set machine interrupt enable bit
@@ -16,6 +17,6 @@ void on_trap() {
             handle_usb_transaction();
             break;
         default:
-            simulation_fail();
+            assert(false);
     }
 }

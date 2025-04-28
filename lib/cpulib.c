@@ -2,12 +2,24 @@
 #include <stdio.h>
 
 static int __stdout_putc(char c, FILE* file) {
-    simulation_putc(c);
+#ifdef SIMULATION
+    simulation_putchar(c);
+#endif
     return c;
 }
 
 static FILE __stdout = FDEV_SETUP_STREAM(__stdout_putc, nullptr, nullptr, _FDEV_SETUP_WRITE);
 FILE* const stdout = &__stdout;
+FILE* const stderr = &__stdout;
+
+void _exit() {
+#ifdef SIMULATION
+    simulation_fail();
+#else
+    while (true) {
+    }
+#endif
+}
 
 volatile uint64_t* timer_cmp = (uint64_t*)0x80000000 + 8;
 
@@ -21,10 +33,6 @@ void set_timer(uint64_t time) {
 
 void sleep_ms(uint32_t time) {
     sleep_for_clock_cycles(time * (CLOCK_FREQUENCY / 1000));
-}
-
-void simulation_putc(char c) {
-    simulation_print((char[2]) { c, '\0' });
 }
 
 #define MORSE_TIME_UNIT 200 // in ms

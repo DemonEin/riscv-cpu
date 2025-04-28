@@ -20,18 +20,14 @@ sleep_for_clock_cycles_loop:
     bgt a0, zero, sleep_for_clock_cycles_loop
     ret
 
-.global pass
-pass:
-    .insn 0x8c000073 # custom instruction to pass test
+#ifdef SIMULATION
 
-.global fail
-fail:
-    .insn 0xcc000073 # custom instruction to fail test
-
-.global simulation_print
-simulation_print:
-    .insn 0x0c000073 # custom instruction to print string starting at a0
+.global simulation_putchar
+simulation_putchar:
+    .insn 0x0c000073 # custom instruction to write one char to stdout
     ret
+
+#endif
 
 .global enable_external_interrupts
 enable_external_interrupts:

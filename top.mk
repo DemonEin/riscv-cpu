@@ -44,28 +44,25 @@ $(target_directory)/verilator/sim: $(testbench) $(target_directory)/simulation/m
 		-Mdir $(@D) \
 		-o $(@F)
 
-binary_prerequisites = $(program_files) $(cpulib_argument) $(linker_script) $(libc_headers) $(libc.a)
-binary_build_command = $(gcc_binary_prefix)gcc \
+# arguments have to be in the right order so I need this chaos
+binary_postfix_arguments := $(program_files) $(libc.a) -lgcc 
+common_binary_prerequisites := $(program_files) $(libc.a) $(linker_script) $(libc_headers)
+binary_base_build_command = $(gcc_binary_prefix)gcc \
                                $(GCC_OPTIONS) \
                                -I $(current_directory) \
                                -T $(linker_script) \
                                -nostdlib \
                                -o $@ \
-                               $(program_files) \
-                               $(cpulib_argument) \
                                -I$(libc_headers) \
-                               $(libc.a) \
                                -lgcc \
                                -Os \
                                -ggdb
 
-cpulib_argument := $(simulation_cpulib_argument)
-$(target_directory)/simulation/a.out: $(binary_prerequisites) | $(target_directory)/simulation
-	$(binary_build_command)
+$(target_directory)/simulation/a.out: $(common_binary_prerequisites) $(simulation_cpulib_argument) | $(target_directory)/simulation
+	$(binary_base_build_command) $(simulation_cpulib_argument) $(binary_postfix_arguments)
 
-cpulib_argument := $(hardware_cpulib_argument)
-$(target_directory)/hardware/a.out: $(binary_prerequisites) | $(target_directory)/hardware
-	$(binary_build_command)
+$(target_directory)/hardware/a.out: $(common_binary_prerequisites) $(hardware_cpulib_argument) | $(target_directory)/hardware
+	$(binary_base_build_command) $(hardware_cpulib_argument) $(binary_postfix_arguments)
 
 %/memory.bin %/entry.txt &: %/a.out | %
 	cargo run --manifest-path $(current_directory)loader/Cargo.toml -- \
@@ -74,12 +71,12 @@ $(target_directory)/hardware/a.out: $(binary_prerequisites) | $(target_directory
 %/memory.hex: %/memory.bin | %
 	hexdump -v -e '/4 "%x "' $< > $@
 
-cpulib_prerequisites := $(lib)/cpulib.h $(lib)/cpulib.c $(lib)/cpulib.s $(lib)/usb.c $(libc_headers)
+cpulib_prerequisites := $(lib)/cpulib.h $(lib)/cpulib.c $(lib)/cpulib.S $(lib)/usb.c $(libc_headers)
 cpulib_build_command = $(gcc_binary_prefix)gcc \
 						$(GCC_OPTIONS) \
 						-r \
 						$(lib)/cpulib.c \
-						$(lib)/cpulib.s \
+						$(lib)/cpulib.S \
 						$(lib)/usb.c \
 						-I$(libc_headers) \
 						-o $@ \
