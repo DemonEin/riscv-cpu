@@ -8,16 +8,37 @@ static int __stdout_putc(char c, FILE* file) {
     return c;
 }
 
+#define STDERR_BUFFER_LENGTH 32
+static char stderr_buffer[STDERR_BUFFER_LENGTH];
+static size_t stderr_buffer_index = 0;
+
+static int __stderr_putc(char c, FILE* file) {
+#ifdef SIMULATION
+    simulation_putchar(c);
+    return c;
+#else
+    // - 1 to make sure there is a trailing null char
+    if (stderr_buffer_index < STDERR_BUFFER_LENGTH - 1) {
+        stderr_buffer[stderr_buffer_index] = c;
+        stderr_buffer_index++;
+        return c;
+    } else {
+        // doesn't set the error indicator on the file, whatever
+        return EOF;
+    }
+#endif
+}
+
 static FILE __stdout = FDEV_SETUP_STREAM(__stdout_putc, nullptr, nullptr, _FDEV_SETUP_WRITE);
+static FILE __stderr = FDEV_SETUP_STREAM(__stderr_putc, nullptr, nullptr, _FDEV_SETUP_WRITE);
 FILE* const stdout = &__stdout;
-FILE* const stderr = &__stdout;
+FILE* const stderr = &__stderr;
 
 void _exit() {
 #ifdef SIMULATION
     simulation_fail();
 #else
-    while (true) {
-    }
+    morse(stderr_buffer);
 #endif
 }
 
