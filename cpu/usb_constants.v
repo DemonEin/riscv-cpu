@@ -16,6 +16,12 @@ localparam BREQUEST_GET_INTERFACE = 10;
 localparam BREQUEST_SET_INTERFACE = 11;
 localparam BREQUEST_SYNCH_FRAME = 12;
 
+localparam DESCRIPTOR_TYPE_DEVICE = 1;
+localparam DESCRIPTOR_TYPE_CONFIGURATION = 2;
+localparam DESCRIPTOR_TYPE_STRING = 3;
+localparam DESCRIPTOR_TYPE_INTERFACE = 4;
+localparam DESCRIPTOR_TYPE_ENDPOINT = 5;
+
 localparam PID_OUT = 4'b0001;
 localparam PID_IN = 4'b1001;
 localparam PID_SETUP = 4'b1101;
