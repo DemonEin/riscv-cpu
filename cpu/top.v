@@ -16,6 +16,7 @@ localparam USB_DATA_BUFFER_SIZE = 1024; // in bytes
 
 module top(
     input clk48,
+    input usr_btn,
     inout usb_d_p,
     inout usb_d_n,
 
@@ -32,7 +33,9 @@ module top(
     output gpio_10,
     output gpio_11,
     output gpio_12,
-    output gpio_13
+    output gpio_13,
+
+    output rst_n
 );
     // wires for module output
     wire [31:0] memory_address,
@@ -281,4 +284,10 @@ module top(
         clk24 <= ~clk24;
     end
 
+    // make the on-board button enter the bootloader
+    reg reset = 1;
+    always @(posedge clk48) begin
+        reset <= usr_btn;
+    end
+    assign rst_n = reset;
 endmodule
