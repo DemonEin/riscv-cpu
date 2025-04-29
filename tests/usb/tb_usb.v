@@ -339,7 +339,8 @@ module tb_usb();
     task receive_packet(output [3:0] pid, output [7:0] data[1023], output[31:0] byte_count);
         // receive sync pattern
         // assume starting in idle or eop state
-        receive_timeout = 477707; // 10 milliseconds of FULL_SPEED_PERIOD
+        receive_timeout = 14; // usb spec says the timeout is at minimum 16, but two bit times are
+                              // already included at the end of send_packet
         while (data_wire != 0 || data_n_wire != 1) begin
             #FULL_SPEED_PERIOD;
             receive_timeout = receive_timeout - 1;
