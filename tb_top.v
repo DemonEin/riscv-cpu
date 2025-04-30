@@ -5,12 +5,14 @@ module tb_top;
     wire usb_d_p, usb_d_n, usb_pullup, r, g, b, null;
     top top(
         clock,
+        1,
         usb_d_p,
         usb_d_n,
         usb_pullup,
         r,
         g,
         b,
+        null,
         null,
         null,
         null,

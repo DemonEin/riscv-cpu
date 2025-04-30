@@ -26,12 +26,14 @@ module tb_usb();
     wire r, g, b, null;
     top top(
         clock48,
+        1,
         data_wire,
         data_n_wire,
         usb_pullup,
         r,
         g,
         b,
+        null,
         null,
         null,
         null,
