@@ -174,27 +174,51 @@ module tb_usb();
         end
     endtask
 
+    reg [3:0] do_bulk_out_transaction_pid;
     task do_bulk_out_transaction(input [7:0] data[1023], input [31:0] byte_count, input [3:0] data_pid);
         $display("tb_usb.v: do_bulk_out_transaction");
+
         send_token_packet(PID_OUT);
         send_data_packet(current_data_pid, data, byte_count);
-        receive_ack();
+        receive_handshake(do_bulk_out_transaction_pid);
+        while (do_bulk_out_transaction_pid != PID_ACK) begin
+            if (do_bulk_out_transaction_pid != PID_NAK) begin
+                $display("got bad pid for bulk out handshake 0b%b", do_bulk_out_transaction_pid);
+                $stop;
+            end
+
+            #100us;
+            send_token_packet(PID_OUT);
+            send_data_packet(current_data_pid, data, byte_count);
+            receive_handshake(do_bulk_out_transaction_pid);
+        end
+
         data_sync_bit = !data_sync_bit;
-        #1ms; // wait so that the device has time to handle the transaction since the testbench
-              // doesn't do retries yes
     endtask
 
+    reg [3:0] do_bulk_in_transaction_pid;
     task do_bulk_in_transaction(output [7:0] data[1023], output [31:0] byte_count);
         $display("tb_usb.v: do_bulk_in_transaction");
+
         send_token_packet(PID_IN);
-        receive_data(current_data_pid, data, byte_count);
+        receive_packet(do_bulk_in_transaction_pid, data, byte_count);
+        while (do_bulk_in_transaction_pid != current_data_pid) begin
+            if (do_bulk_in_transaction_pid != PID_NAK) begin
+                $display("received incorrect pid for data packet: %b", do_bulk_in_transaction_pid);
+                $stop;
+            end
+
+            #100us;
+            send_token_packet(PID_IN);
+            receive_packet(do_bulk_in_transaction_pid, data, byte_count);
+        end
+
         data_sync_bit = !data_sync_bit;
         send_token_packet(PID_ACK);
-        #1ms; // wait so that the device has time to handle the transaction since the testbench
-              // doesn't do retries yes
     endtask
 
     reg [7:0] do_setup_transaction_data[1023];
+    reg [3:0] do_setup_transaction_pid;
     task do_setup_transaction(
         input [7:0] bmRequestType,
         input [7:0] bRequest,
@@ -213,32 +237,16 @@ module tb_usb();
         do_setup_transaction_data[7] = wLength[15:8];
         send_data_packet(PID_DATA0, do_setup_transaction_data, 8);
         data_sync_bit = 1;
-        receive_ack();
-        #1ms; // wait so that the device has time to handle the transaction since the testbench
-              // doesn't do retries yes
-    endtask
-
-
-    reg [3:0] receive_data_pid;
-    task receive_data(input [3:0] pid, output [7:0] data[1023], output [31:0] byte_count);
-        receive_packet(receive_data_pid, data, byte_count);
-
-        if (receive_data_pid != pid) begin
-            $display("received incorrect pid for data packet: %b", receive_data_pid);
-            $stop;
+        receive_handshake(do_setup_transaction_pid);
+        if (do_setup_transaction_pid != PID_ACK) begin
+            $display("did not get ACK after setup packet, got pid 0b%b", do_setup_transaction_pid);
         end
     endtask
-
 
     reg [7:0] receive_ack_data[1023];
     reg [31:0] receive_ack_data_length;
-    reg [3:0] receive_ack_pid;
-    task receive_ack();
-        receive_packet(receive_ack_pid, receive_ack_data, receive_ack_data_length);
-        if (receive_ack_pid != PID_ACK) begin
-            $display("did not receive ack");
-            $stop;
-        end
+    task receive_handshake(output [3:0] pid);
+        receive_packet(pid, receive_ack_data, receive_ack_data_length);
     endtask
 
     reg [7:0] send_token_packet_data[1026];
