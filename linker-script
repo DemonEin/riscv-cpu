@@ -1,5 +1,6 @@
 led = 0x80000010;
 usb_control = 0x80000014;
+usb_device_address = 0x80000018;
 usb_data_buffer = 0xc0000000;
 
 MEMORY {

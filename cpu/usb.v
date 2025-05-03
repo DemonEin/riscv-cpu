@@ -10,6 +10,10 @@ localparam EOP_NEED_SE0_0 = 0;
 localparam EOP_NEED_SE0_1 = 1;
 localparam EOP_NEED_J = 2;
 
+localparam RESPONSE_TYPE_EMPTY = 2'b00;
+localparam RESPONSE_TYPE_DATA = 2'b01;
+localparam RESPONSE_TYPE_STALL = 2'b10;
+
 module usb(
     input clock48,
     inout usb_d_p,
@@ -21,22 +25,21 @@ module usb(
     output reg [31:0] data_buffer_write_value,
     output reg write_to_data_buffer,
     input usb_packet_ready,
-    input [31:0] usb_control,
-    output wire [31:0] set_usb_control
+    input [6:0] device_address,
+    input [15:0] usb_control,
+    output wire [15:0] set_usb_control
 );
     reg [9:0] set_usb_control_data_length;
-    reg [6:0] set_usb_control_address;
-    reg [3:0] set_usb_control_endpoint;
-    reg [1:0] set_usb_control_token;
     // assigning this doesn't work sometimes when in the port connection,
     // so do it here even though I don't know why that wasn't working
     assign set_usb_control = {
-        9'bx, 
-        set_usb_control_token,
-        set_usb_control_endpoint,
-        set_usb_control_address,
+        current_transaction_endpoint,
+        current_transaction_pid[3:2], // transaction type
         set_usb_control_data_length
     };
+
+    wire [9:0] usb_control_data_length = usb_control[9:0];
+    wire [1:0] usb_control_response_type = usb_control[11:10];
 
     reg [1:0] top_state = TOP_STATE_POWERED;
 
@@ -97,15 +100,11 @@ module usb(
     reg [8:0] next_words_read_written;
     reg [3:0] next_transaction_state;
     reg [3:0] next_current_transaction_pid;
-    reg [3:0] next_pending_send;
+    reg next_pending_send;
     reg next_write_enable;
     reg next_send_eop;
-    reg [6:0] next_current_transaction_address;
     reg [3:0] next_current_transaction_endpoint;
     reg [9:0] next_set_usb_control_data_length;
-    reg [6:0] next_set_usb_control_address;
-    reg [3:0] next_set_usb_control_endpoint;
-    reg [1:0] next_set_usb_control_token;
     reg next_data_sync_bit;
     reg [4:0] next_token_crc;
     reg [15:0] next_data_crc;
@@ -113,6 +112,7 @@ module usb(
     reg [7:0] next_data_buffer_address;
     reg next_got_usb_packet;
     reg next_write_to_data_buffer;
+    reg next_failed_to_read_data;
 
     always @* begin
         next_top_state = top_state;
@@ -130,7 +130,6 @@ module usb(
         next_pending_send = pending_send;
         next_write_enable = write_enable;
         next_send_eop = send_eop;
-        next_current_transaction_address = current_transaction_address;
         next_current_transaction_endpoint = current_transaction_endpoint;
         next_data_sync_bit = data_sync_bit;
         next_token_crc = token_crc;
@@ -140,9 +139,7 @@ module usb(
         next_got_usb_packet = got_usb_packet;
         next_write_to_data_buffer = write_to_data_buffer;
         next_set_usb_control_data_length = set_usb_control_data_length;
-        next_set_usb_control_address = set_usb_control_address;
-        next_set_usb_control_endpoint = set_usb_control_endpoint;
-        next_set_usb_control_token = set_usb_control_token;
+        next_failed_to_read_data = failed_to_read_data;
 
         case (top_state)
             TOP_STATE_POWERED: begin
@@ -198,7 +195,6 @@ module usb(
     end
 
     localparam PACKET_STATE_WRITE_DATA = 0;
-    localparam PACKET_STATE_READING = 2;
     localparam PACKET_STATE_WRITE_DATA_CRC = 3;
     localparam PACKET_STATE_WRITE_DATA_PID = 4;
     localparam PACKET_STATE_AWAIT_END_OF_PACKET = 5;
@@ -212,11 +208,6 @@ module usb(
     localparam PACKET_STATE_WRITE_SYNC = 13;
     localparam PACKET_STATE_SEND_EOP = 14;
     localparam PACKET_STATE_WRITE_FINISH = 15;
-
-    localparam PENDING_SEND_NONE = 0;
-    localparam PENDING_SEND_HANDSHAKE = 1;
-    localparam PENDING_SEND_DATA = 2;
-    localparam PENDING_SEND_ANY = 3; // will send whatever the software responds with
 
     localparam TRANSACTION_STATE_IDLE = 0;
     localparam TRANSACTION_STATE_AWAIT_DATA = 1;
@@ -245,9 +236,8 @@ module usb(
     localparam PID_NYET = 4'b0110;
 
     reg [3:0] current_transaction_pid = 0;
-    reg [6:0] current_transaction_address;
     reg [3:0] current_transaction_endpoint;
-    reg [3:0] pending_send = PENDING_SEND_NONE;
+    reg pending_send = 0;
     reg [3:0] packet_state;
     reg [3:0] transaction_state = TRANSACTION_STATE_IDLE;
     reg [3:0] stall_counter;
@@ -255,10 +245,10 @@ module usb(
     reg data_sync_bit; // TODO implement data sync bit error handling
     reg [4:0] token_crc;
     reg [15:0] data_crc;
+    reg failed_to_read_data;
 
     wire read_complete = read_write_bits_count == 1;
     wire write_complete = read_write_bits_count == 1;
-    wire [3:0] usb_control_handshake_pid = { usb_control[22:21], 2'b10 };
 
     reg [4:0] i; 
 
@@ -294,10 +284,22 @@ module usb(
                         case (transaction_state)
                             TRANSACTION_STATE_AWAIT_DATA: begin
                                 if (read_bits[27:24] == current_data_pid) begin
-                                    next_packet_state = PACKET_STATE_READING_DATA;
-                                    next_data_crc = ~0;
-                                    next_words_read_written = 0;
-                                    next_read_write_bits_count = 32;
+                                    // could wait to check usb_packet_ready
+                                    // until actually writing to the data
+                                    // buffer to give as much time as possible
+                                    // to regain ownership of the data buffer
+                                    if (!usb_packet_ready) begin
+                                        next_packet_state = PACKET_STATE_READING_DATA;
+                                        next_data_crc = ~0;
+                                        next_words_read_written = 0;
+                                        next_read_write_bits_count = 32;
+                                    end else begin
+                                        // felt cute might send NAK later idk
+                                        // (send NAK later)
+                                        next_failed_to_read_data = 1;
+                                        next_pending_send = 1;
+                                        next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
+                                    end
                                 end else begin
                                     `ifdef simulation
                                         $display("got bad pid for context %b", read_bits[27:24]);
@@ -315,7 +317,6 @@ module usb(
                                     next_current_transaction_pid = read_bits[27:24];
                                     next_packet_state = PACKET_STATE_READING_TOKEN;
                                     next_token_crc = ~0;
-                                    next_transaction_state = TRANSACTION_STATE_AWAIT_DATA;
                                 end else begin
                                     `ifdef simulation
                                         $stop;
@@ -332,6 +333,7 @@ module usb(
                                 next_data_sync_bit = !data_sync_bit;
                                 next_transaction_state = TRANSACTION_STATE_IDLE;
                                 next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
+                                next_got_usb_packet = 1;
                             end
                             default:
                                 `ifdef simulation
@@ -352,28 +354,30 @@ module usb(
             PACKET_STATE_READING_TOKEN: begin
                 if (read_complete) begin
                     if (next_token_crc == 5'b01100) begin
-                        next_current_transaction_address = read_bits[22:16];
-                        next_current_transaction_endpoint = read_bits[26:23];
+                        if (read_bits[22:16] == device_address) begin
+                            next_current_transaction_endpoint = read_bits[26:23];
 
-                        if (current_transaction_pid == PID_OUT || current_transaction_pid == PID_SETUP) begin
-                            next_transaction_state = TRANSACTION_STATE_AWAIT_DATA;
-                            next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET; // TODO ignore if not receiving EOP immediately?
+                            if (current_transaction_pid == PID_OUT || current_transaction_pid == PID_SETUP) begin
+                                next_transaction_state = TRANSACTION_STATE_AWAIT_DATA;
+                                next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET; // TODO ignore if not receiving EOP immediately?
 
-                            if (current_transaction_pid == PID_SETUP) begin
-                                next_data_sync_bit = 0;
+                                if (current_transaction_pid == PID_SETUP) begin
+                                    next_data_sync_bit = 0;
+                                end
+                            end else if (current_transaction_pid == PID_IN) begin
+                                next_pending_send = 1;
+                                next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
+                            end else begin
+                                // this is an internal error, should never happen
+                                `ifdef simulation
+                                    $stop;
+                                `endif
                             end
-                        end else if (current_transaction_pid == PID_IN) begin
-                            next_got_usb_packet = 1;
-                            next_pending_send  = PENDING_SEND_ANY;
-                            next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
-                            next_set_usb_control_address = next_current_transaction_address;
-                            next_set_usb_control_endpoint = next_current_transaction_endpoint;
-                            next_set_usb_control_token = current_transaction_pid[3:2];
                         end else begin
-                            // this is an internal error, should never happen
                             `ifdef simulation
-                                $stop;
+                                $display("ignoring transaction due to device address");
                             `endif
+                            next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
                         end
                     end else begin
                         `ifdef simulation
@@ -400,11 +404,8 @@ module usb(
                         // need to set all of it here
                         // - 2 because of the two crc bytes
                         next_set_usb_control_data_length = (words_read_written * 4) + ((33 - { 4'b0, read_write_bits_count }) / 8) - 2;
-                        next_set_usb_control_address = current_transaction_address;
-                        next_set_usb_control_endpoint = current_transaction_endpoint;
-                        next_set_usb_control_token = current_transaction_pid[3:2];
                         next_got_usb_packet = 1;
-                        next_pending_send = PENDING_SEND_ANY;
+                        next_pending_send = 1;
                         next_packet_state = PACKET_STATE_FINISH;
                     end else begin
                         `ifdef simulation
@@ -434,62 +435,81 @@ module usb(
                 end
             end
             PACKET_STATE_FINISH: begin // to implement a pause after receiving eop
-                if (pending_send != PENDING_SEND_NONE) begin
+                if (pending_send) begin
                     next_stall_counter = 4; // could be shorter while still complying with spec // TODO use read_write_bits_count instead of separate stall counter
                     next_packet_state = PACKET_STATE_WRITE_PAUSE;
+                    next_pending_send = 0;
                 end else begin
                     next_top_state = TOP_STATE_IDLE;
                 end
             end
             PACKET_STATE_WRITE_PAUSE: begin
-                if (stall_counter == 0 && !usb_packet_ready) begin // usb_packet_ready is set to zero when the software
-                                                                   // has handled the transaction
-                    if (usb_control[24:23] == 2'b00) begin
-                        // ignore transaction
-                        next_top_state = TOP_STATE_IDLE;
-                        next_transaction_state = TRANSACTION_STATE_IDLE;
-                    end else if (usb_control[24:23] == 2'b01 || usb_control[24:23] == 2'b10) begin
-                        next_consecutive_nzri_data_ones = 0;
-                        next_write_enable = 1;
-                        next_packet_state = PACKET_STATE_WRITE_SYNC;
-                        next_read_write_bits_count = 8;
-                        next_read_write_buffer[7:0] = DECODED_SYNC_PATTERN;
+                if (stall_counter == 0) begin
+                    // send sync and pid
+                    next_consecutive_nzri_data_ones = 0;
+                    next_write_enable = 1;
+                    next_packet_state = PACKET_STATE_WRITE_SYNC;
+                    next_read_write_bits_count = 16;
+                    next_read_write_buffer[7:0] = DECODED_SYNC_PATTERN;
+                    next_failed_to_read_data = 0;
 
-                        if (usb_control[24:23] == 2'b01) begin
-                            next_pending_send = PENDING_SEND_HANDSHAKE;
-                        end else if (usb_control[24:23] == 2'b10) begin
-                            next_pending_send = PENDING_SEND_DATA;
+                    case (current_transaction_pid)
+                        PID_SETUP: begin
+                            next_read_write_buffer[15:8] = { ~PID_ACK, PID_ACK };
+                            next_packet_state = PACKET_STATE_WRITE_HANDSHAKE;
+                            next_got_usb_packet = 1;
                         end
-                    end else begin
-                        `ifdef simulation
-                            $display("got invalid usb_control value");
-                            $stop;
-                        `endif
-                    end
-                end
-            end
-            PACKET_STATE_WRITE_SYNC: begin
-                if (write_complete) begin
-                    case (pending_send)
-                        PENDING_SEND_HANDSHAKE: begin
-                            next_read_write_bits_count = 8;
-                            next_read_write_buffer[7:0] = { ~usb_control_handshake_pid, usb_control_handshake_pid };
+                        PID_OUT: begin
+                            // send handshake after receiving data
+                            if (failed_to_read_data) begin
+                                next_read_write_buffer[15:8] = { ~PID_NAK, PID_NAK };
+                            end else begin
+                                if (usb_control_response_type == RESPONSE_TYPE_STALL) begin
+                                    next_read_write_buffer[15:8] = { ~PID_STALL, PID_STALL };
+                                end else begin
+                                    next_read_write_buffer[15:8] = { ~PID_ACK, PID_ACK };
+                                end
+                                next_got_usb_packet = 1;
+                            end
+
                             next_packet_state = PACKET_STATE_WRITE_HANDSHAKE;
                         end
-                        PENDING_SEND_DATA: begin
-                            next_read_write_bits_count = 8;
-                            next_read_write_buffer[7:0] = { ~current_data_pid, current_data_pid };
-                            next_packet_state = PACKET_STATE_WRITE_DATA_PID;
+                        PID_IN: begin
+                            if (!usb_packet_ready) begin
+                                case (usb_control_response_type)
+                                    RESPONSE_TYPE_STALL: begin
+                                        next_read_write_buffer[15:8] = { ~PID_STALL, PID_STALL };
+                                        next_packet_state = PACKET_STATE_WRITE_HANDSHAKE;
+                                        next_got_usb_packet = 1;
+                                    end
+                                    RESPONSE_TYPE_EMPTY: begin
+                                        next_read_write_buffer[15:8] = { ~PID_NAK, PID_NAK };
+                                        next_packet_state = PACKET_STATE_WRITE_HANDSHAKE;
+                                        next_got_usb_packet = 1;
+                                    end
+                                    RESPONSE_TYPE_DATA: begin
+                                        next_read_write_buffer[15:8] = { ~current_data_pid, current_data_pid };
+                                        next_packet_state = PACKET_STATE_WRITE_DATA_PID;
+                                    end
+                                    default: begin
+                                        // internal error
+                                        `ifdef simulation
+                                            $stop;
+                                        `endif
+                                    end
+                                endcase
+                            end else begin
+                                next_read_write_buffer[15:8] = { ~PID_NAK, PID_NAK };
+                                next_packet_state = PACKET_STATE_WRITE_HANDSHAKE;
+                            end
                         end
                         default: begin
-                            // for now
+                            // internal error
                             `ifdef simulation
                                 $stop;
                             `endif
                         end
                     endcase
-
-                    next_pending_send = PENDING_SEND_NONE;
                 end
             end
             PACKET_STATE_WRITE_HANDSHAKE: begin
@@ -576,7 +596,6 @@ module usb(
         write_enable <= next_write_enable;
         send_eop <= next_send_eop;
         words_read_written <= next_words_read_written;
-        current_transaction_address <= next_current_transaction_address;
         current_transaction_endpoint <= next_current_transaction_endpoint;
         data_sync_bit <= next_data_sync_bit;
         token_crc <= next_token_crc;
@@ -584,11 +603,9 @@ module usb(
         data_buffer_write_value <= next_data_buffer_write_value;
         data_buffer_address <= next_data_buffer_address;
         set_usb_control_data_length <= next_set_usb_control_data_length;
-        set_usb_control_address <= next_set_usb_control_address;
-        set_usb_control_endpoint <= next_set_usb_control_endpoint;
-        set_usb_control_token <= next_set_usb_control_token;
         got_usb_packet <= next_got_usb_packet;
         write_to_data_buffer <= next_write_to_data_buffer;
+        failed_to_read_data <= next_failed_to_read_data;
 
         if (se0) begin
             reset_counter <= reset_counter + 1;

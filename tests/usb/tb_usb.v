@@ -58,8 +58,10 @@ module tb_usb();
         // idle
         #10ms
 
+        $display("tb_usb.v: set device address");
         set_device_address(1);
 
+        $display("tb_usb.v: get device descriptor");
         do_control_transfer(
             8'b10000000,
             BREQUEST_GET_DESCRIPTOR,
@@ -73,6 +75,7 @@ module tb_usb();
         if (data_list[0] != 18) $stop;
         if (data_list[1] != DESCRIPTOR_TYPE_DEVICE) $stop;
 
+        $display("tb_usb.v: get configuration descriptor");
         do_control_transfer(
             8'b10000000,
             BREQUEST_GET_DESCRIPTOR,
@@ -172,17 +175,23 @@ module tb_usb();
     endtask
 
     task do_bulk_out_transaction(input [7:0] data[1023], input [31:0] byte_count, input [3:0] data_pid);
+        $display("tb_usb.v: do_bulk_out_transaction");
         send_token_packet(PID_OUT);
         send_data_packet(current_data_pid, data, byte_count);
         receive_ack();
         data_sync_bit = !data_sync_bit;
+        #1ms; // wait so that the device has time to handle the transaction since the testbench
+              // doesn't do retries yes
     endtask
 
     task do_bulk_in_transaction(output [7:0] data[1023], output [31:0] byte_count);
+        $display("tb_usb.v: do_bulk_in_transaction");
         send_token_packet(PID_IN);
         receive_data(current_data_pid, data, byte_count);
         data_sync_bit = !data_sync_bit;
         send_token_packet(PID_ACK);
+        #1ms; // wait so that the device has time to handle the transaction since the testbench
+              // doesn't do retries yes
     endtask
 
     reg [7:0] do_setup_transaction_data[1023];
@@ -205,6 +214,8 @@ module tb_usb();
         send_data_packet(PID_DATA0, do_setup_transaction_data, 8);
         data_sync_bit = 1;
         receive_ack();
+        #1ms; // wait so that the device has time to handle the transaction since the testbench
+              // doesn't do retries yes
     endtask
 
 
@@ -223,7 +234,6 @@ module tb_usb();
     reg [31:0] receive_ack_data_length;
     reg [3:0] receive_ack_pid;
     task receive_ack();
-        $display("waiting to receive ack packet");
         receive_packet(receive_ack_pid, receive_ack_data, receive_ack_data_length);
         if (receive_ack_pid != PID_ACK) begin
             $display("did not receive ack");

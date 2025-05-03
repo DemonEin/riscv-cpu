@@ -81,10 +81,10 @@ struct interface_descriptor {
 };
 #define INTERFACE_DESCRIPTOR_SIZE 9
 
-enum token {
-    TOKEN_OUT = 0b00,
-    TOKEN_IN = 0b10,
-    TOKEN_SETUP = 0b11,
+enum transaction {
+    TRANSACTION_OUT = 0b00,
+    TRANSACTION_IN = 0b10,
+    TRANSACTION_SETUP = 0b11,
 };
 
 enum handshake {
@@ -99,33 +99,21 @@ enum handshake {
 
 extern volatile uint8_t usb_data_buffer[1023];
 
-/* bits 0-9: length of data in bytes
- * bits 10-16: address
- * bits 17-20: endpoint
- * bits 21-22: when receiving an interrupt:
- *                 00 for OUT
- *                 10 for IN
- *                 11 for SETUP
+/* bits 0-9: length of data in bytes, bidirectional
+ * bits 10-11: when receiving an interrupt, an enum transaction that is the transaction that was just done
+ *             when writing the response to send, an enum response_type
+ * bits 12-15: when receiving an interrupt, endpoint of the received transaction
  *
- *             when writing the handshake to send:
- *                 00 for ACK
- *                 10 for NAK
- *                 11 for STALL
- *
- *             (the top two bits of the PID)
- * bits 23-24: when writing:
- *     00 to ignore the transaction
- *     01 to respond with a handshake packet
- *     10 to respond with a data packet
- *             
- * writing to this signals to the gateware to continue
+ * writing to this clear the interrupt and signals the gateware to continue
  */
-extern volatile uint32_t usb_control;
+extern volatile uint16_t usb_control;
+// only set by software, used by the gatware to filter transactions to only the specified address
+extern volatile uint8_t usb_device_address;
+
 static bool in_control_transfer;
 static struct setup_data setup_data;
 static uint16_t data_bytes_sent;
 
-static uint8_t device_address = 0;
 static uint8_t bConfigurationValue = 0;
 
 static const struct device_descriptor device_descriptor = {
@@ -170,46 +158,19 @@ static const struct interface_descriptor interface = {
 
 struct response {
     enum response_type {
-        RESPONSE_TYPE_IGNORE = 0b00,
-        RESPONSE_TYPE_HANDSHAKE = 0b01,
-        RESPONSE_TYPE_DATA = 0b10,
+        // tells the gateware there is no data to send and the buffer can be written with new data
+        RESPONSE_TYPE_EMPTY = 0b00,
+        // tells the gateware to respond with the data in the next IN
+        RESPONSE_TYPE_DATA = 0b01,
+        // tells the gateware to send a STALL in the next transaction
+        RESPONSE_TYPE_STALL = 0b10,
     } type;
-    union {
-        enum handshake handshake;
-        uint16_t data_length;
-    };
+    uint16_t data_length; // only defined for RESPONSE_TYPE_EMPTY
 };
-#define RESPONSE_IGNORE ((struct response){ RESPONSE_TYPE_IGNORE, 0 })
-#define RESPONSE_ACK ((struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_ACK })
-#define RESPONSE_NAK ((struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_NAK })
-#define RESPONSE_STALL ((struct response){ RESPONSE_TYPE_HANDSHAKE, HANDSHAKE_STALL })
+
+#define RESPONSE_EMPTY ((struct response){ RESPONSE_TYPE_EMPTY, 0 })
 #define RESPONSE_DATA(LENGTH) ((struct response){ RESPONSE_TYPE_DATA, LENGTH })
-
-static struct response handle_setup_transaction(uint16_t data_length) {
-    if (data_length != 8) {
-        return RESPONSE_IGNORE;
-    }
-
-    in_control_transfer = true;
-    data_bytes_sent = 0;
-    setup_data = *(volatile struct setup_data*)usb_data_buffer;
-    return RESPONSE_ACK;
-}
-
-static struct response handle_out_transaction(uint16_t data_length) {
-    if (!in_control_transfer) {
-        return RESPONSE_NAK;
-    }
-
-    if ((setup_data.bmRequestType & (1 << 7)) == 0x80) {
-        // in the status stage of an IN control transfer
-        in_control_transfer = false;
-        return RESPONSE_ACK;
-    } else {
-        // in the data stage of an OUT control transfer
-    }
-    return RESPONSE_IGNORE;
-}
+#define RESPONSE_STALL ((struct response){ RESPONSE_TYPE_STALL, 0 })
 
 static struct response send_device_descriptor() {
     // send device descriptor (only)
@@ -254,117 +215,131 @@ static struct response send_configuration() {
     return RESPONSE_DATA(bytes_to_send_this_packet);
 }
 
-static struct response handle_in_transaction() {
-    if (!in_control_transfer) {
-        return RESPONSE_NAK;
-    }
-
-    if ((setup_data.bmRequestType & (1 << 7)) == 0x80) { // 0 is host-to-device, 1 is device-to-host
-        // this is a data stage of an in control transfer
-        switch (setup_data.bRequest) {
-            case BREQUEST_GET_CONFIGURATION:
-                usb_data_buffer[0] = bConfigurationValue;
-                return RESPONSE_DATA(1);
-            case BREQUEST_GET_DESCRIPTOR:
-                switch (setup_data.wValue >> 8) { // this is the descriptor type
-                    case DESCRIPTOR_TYPE_DEVICE:
-                        return send_device_descriptor();
-                    case DESCRIPTOR_TYPE_CONFIGURATION:
-                        return send_configuration();
-                    default:
-                        return RESPONSE_STALL;
-                }
-            default:
-                return RESPONSE_STALL;
-        }
-    } else {
-        // this is the status stage of an out control transfer
-
-        struct response response;
-        switch (setup_data.bRequest) {
-            case BREQUEST_SET_ADDRESS:
-                // has to be done in the setup stage, unlike other transfers
-                device_address = setup_data.wValue;
-                response = RESPONSE_DATA(0);
-                break;
-            case BREQUEST_SET_CONFIGURATION:
-                if (setup_data.wValue <= 1) {
-                    bConfigurationValue = setup_data.wValue;
-                    response = RESPONSE_DATA(0);
-                } else {
-                    response = RESPONSE_STALL;
-                }
-                break;
-            case BREQUEST_CLEAR_FEATURE:
-                response = RESPONSE_STALL;
-                break;
-            case BREQUEST_SET_DESCRIPTOR:
-                response = RESPONSE_STALL;
-                break;
-            case BREQUEST_SET_FEATURE:
-                response = RESPONSE_STALL;
-                break;
-            case BREQUEST_SET_INTERFACE:
-                response = RESPONSE_STALL;
-                break;
-            default:
-                response = RESPONSE_STALL;
-                break;
-        }
-
-        in_control_transfer = false;
-        return response;
+static struct response send_descriptor() {
+    switch (setup_data.wValue >> 8) { // this is the descriptor type
+        case DESCRIPTOR_TYPE_DEVICE:
+            return send_device_descriptor();
+        case DESCRIPTOR_TYPE_CONFIGURATION:
+            return send_configuration();
+        default:
+            return RESPONSE_STALL;
     }
 }
 
-/* an usb external interrupt is triggered when receiving the data packet of an OUT transaction
- * and the token packet of an IN transaction
- *
- * in both, usb_control contains the address, endpoint, and token type
- *
- * in an OUT transaction:
- *     usb_control contains the length of the data section
- *     usb_data_buffer contains the data
- *     any write to usb_control clears the interrupt, signals to
- *         the gateware it now owns the data buffer, and causes the gateware
- *         to send a handshake of the type specified by usb_control
- *
- * in an IN transaction:
- *     any write to usb_control clears the interrupt and causes the
- *         gateware to send the numbers of bytes specified by usb_control
- *        in usb_data_buffer in a data packet
- */
+// a usb external interrupt is triggered when a transaction is completed
 static struct response make_usb_response(const uint32_t usb_control_copy) {
-    if (((usb_control_copy >> 10) & 0x7f) != device_address) {
-        return RESPONSE_IGNORE;
+    if (((usb_control_copy >> 12) & 0xf) != 0) { // 0 is the control endpoint
+        return RESPONSE_STALL;
+    }
+    const enum transaction transaction = usb_control_copy >> 10 & 0b11;
+    if (transaction == 0b01) { // this is an invalid value
+        return RESPONSE_STALL;
     }
 
-    const unsigned int token = usb_control_copy >> 21 & 0b11;
-    if (token == TOKEN_SETUP || token == TOKEN_OUT) {
-        const uint16_t data_length = usb_control_copy & 0x3ff;
-        return token == TOKEN_SETUP ? handle_setup_transaction(data_length)
-                                    : handle_out_transaction(data_length);
-    } else if (token == TOKEN_IN) {
-        return handle_in_transaction();
-    } else {
-        return RESPONSE_IGNORE;
+    if (transaction == TRANSACTION_SETUP) {
+        in_control_transfer = true;
+        // TODO consider whether I need all the data
+        setup_data = *(volatile struct setup_data*)usb_data_buffer;
+    }
+
+    switch (setup_data.bRequest) {
+        // control write transfers
+        case BREQUEST_CLEAR_FEATURE: {
+            return RESPONSE_STALL;
+        }
+        case BREQUEST_SET_ADDRESS:
+            switch (transaction) {
+                case TRANSACTION_SETUP:
+                    return RESPONSE_DATA(0);
+                case TRANSACTION_OUT:
+                    return RESPONSE_STALL;
+                case TRANSACTION_IN:
+                    usb_device_address = setup_data.wValue;
+                    in_control_transfer = false;
+                    return RESPONSE_EMPTY;
+            }
+        case BREQUEST_SET_CONFIGURATION:
+            switch (transaction) {
+                case TRANSACTION_SETUP:
+                    if (setup_data.wValue <= 1) {
+                        bConfigurationValue = setup_data.wValue;
+                        return RESPONSE_DATA(0);
+                    } else {
+                        return RESPONSE_STALL;
+                    }
+                case TRANSACTION_OUT:
+                    return RESPONSE_STALL;
+                case TRANSACTION_IN:
+                    in_control_transfer = false;
+                    return RESPONSE_EMPTY;
+            }
+        case BREQUEST_SET_DESCRIPTOR:
+            return RESPONSE_STALL;
+        case BREQUEST_SET_FEATURE:
+            return RESPONSE_STALL;
+        case BREQUEST_SET_INTERFACE:
+            return RESPONSE_STALL;
+
+        // control read transfers
+        case BREQUEST_GET_CONFIGURATION:
+            switch (transaction) {
+                case TRANSACTION_SETUP:
+                    usb_data_buffer[0] = bConfigurationValue;
+                    return RESPONSE_DATA(1);
+                case TRANSACTION_IN:
+                    return RESPONSE_EMPTY;
+                case TRANSACTION_OUT:
+                    in_control_transfer = false;
+                    return RESPONSE_EMPTY;
+            }
+        case BREQUEST_GET_DESCRIPTOR:
+            switch (transaction) {
+                case TRANSACTION_SETUP:
+                    data_bytes_sent = 0;
+                    return send_descriptor();
+                case TRANSACTION_IN:
+                    return send_descriptor();
+                case TRANSACTION_OUT:
+                    in_control_transfer = false;
+                    return RESPONSE_EMPTY;
+            }
+        case BREQUEST_GET_INTERFACE:
+            return RESPONSE_STALL;
+        case BREQUEST_GET_STATUS:
+            switch (transaction) {
+                case TRANSACTION_SETUP:
+                    switch (setup_data.bmRequestType & 0b11) {
+                        case 0b00: // device
+                            usb_data_buffer[0] = 0;
+                            usb_data_buffer[1] = 0;
+                            return RESPONSE_DATA(2);
+                        case 0b01: // interface
+                            usb_data_buffer[0] = 0;
+                            usb_data_buffer[1] = 0;
+                            return RESPONSE_DATA(2);
+                        case 0b10: // endpoint
+                            usb_data_buffer[0] = 0;
+                            usb_data_buffer[1] = 0;
+                            return RESPONSE_DATA(2);
+                        default:
+                            return RESPONSE_STALL;
+                    }
+                case TRANSACTION_IN:
+                    return RESPONSE_EMPTY;
+                case TRANSACTION_OUT:
+                    in_control_transfer = false;
+                    return RESPONSE_EMPTY;
+            }
+        case BREQUEST_SYNCH_FRAME:
+            return RESPONSE_STALL;
     }
 }
 
 void handle_usb_transaction() {
     const struct response response = make_usb_response(usb_control);
-    uint32_t result_usb_control = response.type << 23;
-    switch (response.type) {
-        case RESPONSE_TYPE_IGNORE:
-            break;
-        case RESPONSE_TYPE_HANDSHAKE:
-            result_usb_control |= response.handshake << 21;
-            break;
-        case RESPONSE_TYPE_DATA:
-            result_usb_control |= response.data_length & 0x3ff;
-            break;
-        default:
-            assert(false);
+    uint32_t result_usb_control = response.type << 10;
+    if (response.type == RESPONSE_TYPE_DATA) {
+        result_usb_control |= response.data_length & 0x3ff;
     }
 
     usb_control = result_usb_control;
