@@ -298,6 +298,13 @@ module usb(
                                         next_words_read_written = 0;
                                         next_read_write_bits_count = 32;
                                     end else begin
+                                        `ifdef simulation
+                                            if (current_transaction_pid == PID_SETUP) begin
+                                                // TODO handle/prevent this case
+                                                $display("not ready for setup data");
+                                                $stop;
+                                            end
+                                        `endif
                                         // felt cute might send NAK later idk
                                         // (send NAK later)
                                         next_failed_to_read_data = 1;

@@ -232,6 +232,7 @@ module tb_usb();
         input [15:0] wIndex,
         input [15:0] wLength
     );
+        $display("tb_usb.v: do_setup_transaction");
         send_token_packet(PID_SETUP);
         do_setup_transaction_data[0] = bmRequestType;
         do_setup_transaction_data[1] = bRequest;
