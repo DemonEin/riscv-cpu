@@ -317,6 +317,8 @@ module usb(
                                     || read_bits[27:24] == PID_OUT
                                     || read_bits[27:24] == PID_SETUP
                                 ) begin
+                                    // code here must match the retry code in
+                                    // TRANSACTION_STATE_AWAIT_HANDSHAKE
                                     next_read_write_bits_count = 16;
                                     next_current_transaction_pid = read_bits[27:24];
                                     next_packet_state = PACKET_STATE_READING_TOKEN;
@@ -329,15 +331,26 @@ module usb(
                                 end
                             end
                             TRANSACTION_STATE_AWAIT_HANDSHAKE: begin
-                                `ifdef simulation
-                                    if (read_bits[27:24] != PID_ACK) begin
-                                        $stop;
-                                    end
-                                `endif
-                                next_data_sync_bit_transmit = !data_sync_bit_transmit;
-                                next_transaction_state = TRANSACTION_STATE_IDLE;
-                                next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
-                                next_got_usb_packet = 1;
+                                if (read_bits[27:24] == current_transaction_pid) begin
+                                    // data packet was ignored so we're getting
+                                    // the token packet again, handle it normally
+                                    //
+                                    // code here must match the token handling code in
+                                    // TRANSACTION_STATE_IDLE
+                                    next_read_write_bits_count = 16;
+                                    next_packet_state = PACKET_STATE_READING_TOKEN;
+                                    next_token_crc = ~0;
+                                end else begin
+                                    `ifdef simulation
+                                        if (read_bits[27:24] != PID_ACK) begin
+                                            $stop;
+                                        end
+                                    `endif
+                                    next_data_sync_bit_transmit = !data_sync_bit_transmit;
+                                    next_transaction_state = TRANSACTION_STATE_IDLE;
+                                    next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
+                                    next_got_usb_packet = 1;
+                                end
                             end
                             default:
                                 `ifdef simulation
