@@ -67,7 +67,8 @@ module usb(
     reg output_data, output_data_n;
     reg send_eop = 0;
     reg pending_load = 0;
-    wire [3:0] current_data_pid = { data_sync_bit, PID_DATA0[2:0] };
+    wire [3:0] current_data_pid_receive = { data_sync_bit_receive, PID_DATA0[2:0] };
+    wire [3:0] current_data_pid_transmit = { data_sync_bit_transmit, PID_DATA0[2:0] };
 
     always @* begin
         if (send_eop) begin
@@ -105,7 +106,8 @@ module usb(
     reg next_send_eop;
     reg [3:0] next_current_transaction_endpoint;
     reg [9:0] next_set_usb_control_data_length;
-    reg next_data_sync_bit;
+    reg next_data_sync_bit_receive;
+    reg next_data_sync_bit_transmit;
     reg [4:0] next_token_crc;
     reg [15:0] next_data_crc;
     reg [31:0] next_data_buffer_write_value;
@@ -131,7 +133,8 @@ module usb(
         next_write_enable = write_enable;
         next_send_eop = send_eop;
         next_current_transaction_endpoint = current_transaction_endpoint;
-        next_data_sync_bit = data_sync_bit;
+        next_data_sync_bit_receive = data_sync_bit_receive;
+        next_data_sync_bit_transmit = data_sync_bit_transmit;
         next_token_crc = token_crc;
         next_data_crc = data_crc;
         next_data_buffer_write_value = data_buffer_write_value;
@@ -242,7 +245,8 @@ module usb(
     reg [3:0] transaction_state = TRANSACTION_STATE_IDLE;
     reg [3:0] stall_counter;
     reg [8:0] words_read_written;
-    reg data_sync_bit; // TODO implement data sync bit error handling
+    reg data_sync_bit_receive;
+    reg data_sync_bit_transmit;
     reg [4:0] token_crc;
     reg [15:0] data_crc;
     reg failed_to_read_data;
@@ -283,7 +287,7 @@ module usb(
                     if (read_bits[27:24] == ~read_bits[31:28]) begin // check PID check
                         case (transaction_state)
                             TRANSACTION_STATE_AWAIT_DATA: begin
-                                if (read_bits[27:24] == current_data_pid) begin
+                                if (read_bits[27:24] == current_data_pid_receive) begin
                                     // could wait to check usb_packet_ready
                                     // until actually writing to the data
                                     // buffer to give as much time as possible
@@ -330,7 +334,7 @@ module usb(
                                         $stop;
                                     end
                                 `endif
-                                next_data_sync_bit = !data_sync_bit;
+                                next_data_sync_bit_transmit = !data_sync_bit_transmit;
                                 next_transaction_state = TRANSACTION_STATE_IDLE;
                                 next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET;
                                 next_got_usb_packet = 1;
@@ -362,7 +366,8 @@ module usb(
                                 next_packet_state = PACKET_STATE_AWAIT_END_OF_PACKET; // TODO ignore if not receiving EOP immediately?
 
                                 if (current_transaction_pid == PID_SETUP) begin
-                                    next_data_sync_bit = 0;
+                                    next_data_sync_bit_transmit = 1;
+                                    next_data_sync_bit_receive = 0;
                                 end
                             end else if (current_transaction_pid == PID_IN) begin
                                 next_pending_send = 1;
@@ -399,7 +404,7 @@ module usb(
                             next_data_buffer_address = words_read_written[7:0];
                             next_write_to_data_buffer = 1;
                         end
-                        next_data_sync_bit = !data_sync_bit;
+                        next_data_sync_bit_receive = !data_sync_bit_receive;
                         // 33 - read_write_bits_count is the number of bits that have been read on this word
                         // need to set all of it here
                         // - 2 because of the two crc bytes
@@ -488,7 +493,7 @@ module usb(
                                         next_got_usb_packet = 1;
                                     end
                                     RESPONSE_TYPE_DATA: begin
-                                        next_read_write_buffer[15:8] = { ~current_data_pid, current_data_pid };
+                                        next_read_write_buffer[15:8] = { ~current_data_pid_transmit, current_data_pid_transmit };
                                         next_packet_state = PACKET_STATE_WRITE_DATA_PID;
                                     end
                                     default: begin
@@ -597,7 +602,8 @@ module usb(
         send_eop <= next_send_eop;
         words_read_written <= next_words_read_written;
         current_transaction_endpoint <= next_current_transaction_endpoint;
-        data_sync_bit <= next_data_sync_bit;
+        data_sync_bit_receive <= next_data_sync_bit_receive;
+        data_sync_bit_transmit <= next_data_sync_bit_transmit;
         token_crc <= next_token_crc;
         data_crc <= next_data_crc;
         data_buffer_write_value <= next_data_buffer_write_value;

@@ -12,8 +12,10 @@ module tb_usb();
     tri1 data_wire = write_enable ? output_data : 1'bz;
     tri0 data_n_wire = write_enable ? output_data_n : 1'bz;
     wire end_of_packet = !data_wire && !data_n_wire;
-    reg data_sync_bit = 0;
-    wire [3:0] current_data_pid = { data_sync_bit, PID_DATA0[2:0] };
+    reg data_sync_bit_receive = 0;
+    reg data_sync_bit_transmit = 0;
+    wire [3:0] current_data_pid_receive = { data_sync_bit_receive, PID_DATA0[2:0] };
+    wire [3:0] current_data_pid_transmit = { data_sync_bit_transmit, PID_DATA0[2:0] };
 
     reg [7:0] data_list[1023];
     reg [31:0] data_list_length;
@@ -179,7 +181,7 @@ module tb_usb();
         $display("tb_usb.v: do_bulk_out_transaction");
 
         send_token_packet(PID_OUT);
-        send_data_packet(current_data_pid, data, byte_count);
+        send_data_packet(current_data_pid_transmit, data, byte_count);
         receive_handshake(do_bulk_out_transaction_pid);
         while (do_bulk_out_transaction_pid != PID_ACK) begin
             if (do_bulk_out_transaction_pid != PID_NAK) begin
@@ -189,11 +191,11 @@ module tb_usb();
 
             #100us;
             send_token_packet(PID_OUT);
-            send_data_packet(current_data_pid, data, byte_count);
+            send_data_packet(current_data_pid_transmit, data, byte_count);
             receive_handshake(do_bulk_out_transaction_pid);
         end
 
-        data_sync_bit = !data_sync_bit;
+        data_sync_bit_transmit = !data_sync_bit_transmit;
     endtask
 
     reg [3:0] do_bulk_in_transaction_pid;
@@ -202,7 +204,7 @@ module tb_usb();
 
         send_token_packet(PID_IN);
         receive_packet(do_bulk_in_transaction_pid, data, byte_count);
-        while (do_bulk_in_transaction_pid != current_data_pid) begin
+        while (do_bulk_in_transaction_pid != current_data_pid_receive) begin
             if (do_bulk_in_transaction_pid != PID_NAK) begin
                 $display("received incorrect pid for data packet: %b", do_bulk_in_transaction_pid);
                 $stop;
@@ -213,7 +215,7 @@ module tb_usb();
             receive_packet(do_bulk_in_transaction_pid, data, byte_count);
         end
 
-        data_sync_bit = !data_sync_bit;
+        data_sync_bit_receive = !data_sync_bit_receive;
         send_token_packet(PID_ACK);
     endtask
 
@@ -236,7 +238,8 @@ module tb_usb();
         do_setup_transaction_data[6] = wLength[7:0];
         do_setup_transaction_data[7] = wLength[15:8];
         send_data_packet(PID_DATA0, do_setup_transaction_data, 8);
-        data_sync_bit = 1;
+        data_sync_bit_transmit = 1;
+        data_sync_bit_receive = 1;
         receive_handshake(do_setup_transaction_pid);
         if (do_setup_transaction_pid != PID_ACK) begin
             $display("did not get ACK after setup packet, got pid 0b%b", do_setup_transaction_pid);
