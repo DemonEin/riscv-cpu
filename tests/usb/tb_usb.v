@@ -101,10 +101,13 @@ module tb_usb();
             data_list,
             data_list_length
         );
-        if (data_list_length <= 9) $stop;
+        if (data_list_length < 18) $stop; // because this must contain one configuration descriptor
+                                          // (length 9) and at least one interface descriptor
+                                          // (length 9)
         if (data_list[0] != 9) $stop;
         if (data_list[1] != DESCRIPTOR_TYPE_CONFIGURATION) $stop;
         if (data_list[2] <= 9) $stop;
+        if (data_list[9] != 9) $stop;
 
         do_control_transfer(
             8'b00000000,

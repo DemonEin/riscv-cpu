@@ -208,7 +208,7 @@ static struct response send_configuration() {
     );
     memcpy(
         (uint8_t*)usb_data_buffer + configuration_bytes_to_send,
-        (const uint8_t*)&device_descriptor + (data_bytes_sent - CONFIGURATION_DESCRIPTOR_SIZE),
+        (const uint8_t*)&interface + (INTERFACE_DESCRIPTOR_SIZE - interface_bytes_to_send),
         interface_bytes_to_send
     );
     data_bytes_sent += bytes_to_send_this_packet;
