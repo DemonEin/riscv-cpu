@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <stdint.h>
 
 #define CLOCK_FREQUENCY 12000000
@@ -28,3 +29,5 @@ void enable_external_interrupts();
 
 void clear_usb_interrupt();
 void handle_usb_transaction();
+
+void hexdump(const uint8_t*, size_t);

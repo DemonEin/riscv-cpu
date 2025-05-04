@@ -56,6 +56,29 @@ void sleep_ms(uint32_t time) {
     sleep_for_clock_cycles(time * (CLOCK_FREQUENCY / 1000));
 }
 
+static char nibble_to_hex(uint8_t byte) {
+    const uint8_t nibble = byte & 0xf;
+    if (nibble < 10) {
+        return '0' + nibble;
+    } else {
+        return (nibble - 10) + 'a';
+    }
+}
+
+void hexdump(const uint8_t* buffer, size_t length) {
+    for (size_t i = 0; i < length; i++) {
+        const uint8_t byte = buffer[i];
+        putchar('0');
+        putchar('x');
+        putchar(nibble_to_hex(byte >> 4));
+        putchar(nibble_to_hex(byte));
+        if (!(i == length - 1)) {
+            putchar(' ');
+        }
+    }
+    putchar('\n');
+}
+
 #define MORSE_TIME_UNIT 200 // in ms
 
 void morse_sleep(uint32_t time_units) {
