@@ -76,6 +76,7 @@ module tb_usb();
         if (data_list_length != 18) $stop;
         if (data_list[0] != 18) $stop;
         if (data_list[1] != DESCRIPTOR_TYPE_DEVICE) $stop;
+        if (data_list[17] < 1) $stop;
 
         $display("tb_usb.v: get configuration descriptor");
         do_control_transfer(

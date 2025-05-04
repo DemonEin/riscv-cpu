@@ -130,7 +130,7 @@ static const struct device_descriptor device_descriptor = {
     .iManufacturer = 0, // TODO add
     .iProduct = 0, // TODO add
     .iSerialNumber = 0, // TODO add
-    .bNumConfigurations = 0,
+    .bNumConfigurations = 1,
 };
 
 static const struct configuration_descriptor configuration = {
