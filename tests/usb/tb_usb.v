@@ -181,8 +181,10 @@ module tb_usb();
     endtask
 
     reg [3:0] do_bulk_out_transaction_pid;
+    reg [31:0] do_bulk_out_transaction_timeout;
     task do_bulk_out_transaction(input [7:0] data[1023], input [31:0] byte_count, input [3:0] data_pid);
         $display("tb_usb.v: do_bulk_out_transaction");
+        do_bulk_out_transaction_timeout = 0;
 
         send_token_packet(PID_OUT);
         send_data_packet(current_data_pid_transmit, data, byte_count);
@@ -190,6 +192,12 @@ module tb_usb();
         while (do_bulk_out_transaction_pid != PID_ACK) begin
             if (do_bulk_out_transaction_pid != PID_NAK) begin
                 $display("got bad pid for bulk out handshake 0b%b", do_bulk_out_transaction_pid);
+                $stop;
+            end
+
+            do_bulk_out_transaction_timeout = do_bulk_out_transaction_timeout + 1;
+            if (do_bulk_out_transaction_timeout >= 500) begin // takes 50ms
+                $display("timeout when doing bulk out transaction");
                 $stop;
             end
 
@@ -203,14 +211,22 @@ module tb_usb();
     endtask
 
     reg [3:0] do_bulk_in_transaction_pid;
+    reg [31:0] do_bulk_in_transaction_timeout;
     task do_bulk_in_transaction(output [7:0] data[1023], output [31:0] byte_count);
         $display("tb_usb.v: do_bulk_in_transaction");
+        do_bulk_in_transaction_timeout = 0;
 
         send_token_packet(PID_IN);
         receive_packet(do_bulk_in_transaction_pid, data, byte_count);
         while (do_bulk_in_transaction_pid != current_data_pid_receive) begin
             if (do_bulk_in_transaction_pid != PID_NAK) begin
                 $display("received incorrect pid for data packet: %b", do_bulk_in_transaction_pid);
+                $stop;
+            end
+
+            do_bulk_in_transaction_timeout = do_bulk_in_transaction_timeout + 1;
+            if (do_bulk_in_transaction_timeout >= 500) begin // takes 50ms
+                $display("timeout when doing bulk in transaction");
                 $stop;
             end
 
