@@ -18,6 +18,8 @@ enum bRequest : uint8_t {
     BREQUEST_GET_INTERFACE = 10,
     BREQUEST_SET_INTERFACE = 11,
     BREQUEST_SYNCH_FRAME = 12,
+    BREQUEST_CUSTOM_OUT = 13,
+    BREQUEST_CUSTOM_IN = 14,
 };
 
 enum bDescriptorType : uint8_t {
@@ -97,7 +99,8 @@ enum handshake {
 // default control pipe
 #define MAX_PACKET_SIZE 64
 
-extern volatile uint8_t usb_data_buffer[1023];
+#define USB_DATA_BUFFER_LENGTH 1023
+extern volatile uint8_t usb_data_buffer[USB_DATA_BUFFER_LENGTH];
 
 /* bits 0-9: length of data in bytes, bidirectional
  * bits 10-11: when receiving an interrupt, an enum transaction that is the transaction that was just done
@@ -172,6 +175,53 @@ struct response {
 #define RESPONSE_DATA(LENGTH) ((struct response){ RESPONSE_TYPE_DATA, LENGTH })
 #define RESPONSE_STALL ((struct response){ RESPONSE_TYPE_STALL, 0 })
 
+#define BULK_READ_BUFFER_LENGTH 64
+volatile struct bulk_read_ring_buffer {
+    const size_t length;
+    size_t read_index;
+    size_t write_index;
+    uint8_t buffer[BULK_READ_BUFFER_LENGTH];
+} bulk_read_ring_buffer = {
+    BULK_READ_BUFFER_LENGTH,
+    0,
+    0,
+};
+
+static struct response
+make_bulk_endpoint_response(enum transaction transaction, uint16_t data_length) {
+    if (transaction == TRANSACTION_SETUP) {
+        in_control_transfer = true;
+        // TODO consider whether I need all the data
+        setup_data = *(volatile struct setup_data*)usb_data_buffer;
+    }
+
+    switch (transaction) {
+        case TRANSACTION_IN:
+            in_control_transfer = false;
+            return RESPONSE_DATA(0);
+        case TRANSACTION_OUT:
+            // casting away volatile, TODO check
+            const size_t bytes_written = ring_buffer_write(
+                (volatile struct ring_buffer*)&bulk_read_ring_buffer,
+                usb_data_buffer,
+                data_length
+            );
+            if (bytes_written == data_length) {
+                return RESPONSE_EMPTY;
+            } else {
+                return RESPONSE_STALL;
+            }
+            break;
+        case TRANSACTION_SETUP:
+            switch (setup_data.bRequest) {
+                case BREQUEST_CUSTOM_OUT:
+                    return RESPONSE_EMPTY;
+                default:
+                    return RESPONSE_STALL;
+            }
+    }
+}
+
 static struct response send_device_descriptor() {
     // send device descriptor (only)
     const uint16_t total_transaction_bytes = min(setup_data.wLength, DEVICE_DESCRIPTOR_SIZE);
@@ -226,16 +276,7 @@ static struct response send_descriptor() {
     }
 }
 
-// a usb external interrupt is triggered when a transaction is completed
-static struct response make_usb_response(const uint32_t usb_control_copy) {
-    if (((usb_control_copy >> 12) & 0xf) != 0) { // 0 is the control endpoint
-        return RESPONSE_STALL;
-    }
-    const enum transaction transaction = usb_control_copy >> 10 & 0b11;
-    if (transaction == 0b01) { // this is an invalid value
-        return RESPONSE_STALL;
-    }
-
+static struct response make_default_control_endpoint_response(enum transaction transaction) {
     if (transaction == TRANSACTION_SETUP) {
         in_control_transfer = true;
         // TODO consider whether I need all the data
@@ -331,6 +372,24 @@ static struct response make_usb_response(const uint32_t usb_control_copy) {
                     return RESPONSE_EMPTY;
             }
         case BREQUEST_SYNCH_FRAME:
+            return RESPONSE_STALL;
+    }
+}
+
+// a usb external interrupt is triggered when a transaction is completed
+static struct response make_usb_response(const uint32_t usb_control_copy) {
+    const enum transaction transaction = usb_control_copy >> 10 & 0b11;
+    assert(transaction != 0b01);
+    const uint16_t data_length = usb_control_copy & 0x3ff;
+    assert(data_length <= USB_DATA_BUFFER_LENGTH);
+
+    uint8_t endpoint = (usb_control_copy >> 12) & 0xf;
+    switch (endpoint) {
+        case 0:
+            return make_default_control_endpoint_response(transaction);
+        case 1:
+            return make_bulk_endpoint_response(transaction, data_length);
+        default:
             return RESPONSE_STALL;
     }
 }
