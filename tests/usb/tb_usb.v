@@ -130,8 +130,6 @@ module tb_usb();
         if (data_list_length != 1) $stop;
         if (data_list[0] != 1) $stop;
 
-        test_device_endpoint = 1;
-
         do_control_transfer(
             8'b00000000,
             13,

@@ -187,41 +187,6 @@ volatile struct bulk_read_ring_buffer {
     0,
 };
 
-static struct response
-make_bulk_endpoint_response(enum transaction transaction, uint16_t data_length) {
-    if (transaction == TRANSACTION_SETUP) {
-        in_control_transfer = true;
-        // TODO consider whether I need all the data
-        setup_data = *(volatile struct setup_data*)usb_data_buffer;
-    }
-
-    switch (transaction) {
-        case TRANSACTION_IN:
-            in_control_transfer = false;
-            return RESPONSE_DATA(0);
-        case TRANSACTION_OUT:
-            // casting away volatile, TODO check
-            const size_t bytes_written = ring_buffer_write(
-                (volatile struct ring_buffer*)&bulk_read_ring_buffer,
-                usb_data_buffer,
-                data_length
-            );
-            if (bytes_written == data_length) {
-                return RESPONSE_EMPTY;
-            } else {
-                return RESPONSE_STALL;
-            }
-            break;
-        case TRANSACTION_SETUP:
-            switch (setup_data.bRequest) {
-                case BREQUEST_CUSTOM_OUT:
-                    return RESPONSE_EMPTY;
-                default:
-                    return RESPONSE_STALL;
-            }
-    }
-}
-
 static struct response send_device_descriptor() {
     // send device descriptor (only)
     const uint16_t total_transaction_bytes = min(setup_data.wLength, DEVICE_DESCRIPTOR_SIZE);
@@ -276,7 +241,8 @@ static struct response send_descriptor() {
     }
 }
 
-static struct response make_default_control_endpoint_response(enum transaction transaction) {
+static struct response
+make_default_control_endpoint_response(enum transaction transaction, uint16_t data_length) {
     if (transaction == TRANSACTION_SETUP) {
         in_control_transfer = true;
         // TODO consider whether I need all the data
@@ -373,6 +339,31 @@ static struct response make_default_control_endpoint_response(enum transaction t
             }
         case BREQUEST_SYNCH_FRAME:
             return RESPONSE_STALL;
+
+        // custom transfers
+        case BREQUEST_CUSTOM_OUT:
+            switch (transaction) {
+                case TRANSACTION_SETUP:
+                    return RESPONSE_EMPTY;
+                case TRANSACTION_OUT:
+                    // casting away volatile, TODO check
+                    const size_t bytes_written = ring_buffer_write(
+                        (volatile struct ring_buffer*)&bulk_read_ring_buffer,
+                        usb_data_buffer,
+                        data_length
+                    );
+                    if (bytes_written == data_length) {
+                        return RESPONSE_DATA(0);
+                    } else {
+                        return RESPONSE_STALL;
+                    }
+                case TRANSACTION_IN:
+                    in_control_transfer = false;
+                    return RESPONSE_EMPTY;
+            }
+
+        default:
+            return RESPONSE_STALL;
     }
 }
 
@@ -384,11 +375,10 @@ static struct response make_usb_response(const uint32_t usb_control_copy) {
     assert(data_length <= USB_DATA_BUFFER_LENGTH);
 
     uint8_t endpoint = (usb_control_copy >> 12) & 0xf;
+    // at one point I had another endpoint so keep this as a switch if I add an endpoint later
     switch (endpoint) {
         case 0:
-            return make_default_control_endpoint_response(transaction);
-        case 1:
-            return make_bulk_endpoint_response(transaction, data_length);
+            return make_default_control_endpoint_response(transaction, data_length);
         default:
             return RESPONSE_STALL;
     }
