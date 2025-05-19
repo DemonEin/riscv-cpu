@@ -8,7 +8,7 @@ int main() {
         uint8_t read_buffer[1];
         size_t bytes_read = usb_read(read_buffer, 1);
         if (bytes_read > 0) {
-            led = ~led;
+            led = !led;
         }
     }
 }
