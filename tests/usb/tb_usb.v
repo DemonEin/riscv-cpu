@@ -64,6 +64,9 @@ module tb_usb();
 
         $display("tb_usb.v: set device address");
         set_device_address(1);
+        #10ms // give some time for the device to change address; this is in
+              // place of the correct thing to do here which would be to retry
+              // until the device responds
 
         $display("tb_usb.v: get device descriptor");
         do_control_transfer(
