@@ -2,9 +2,14 @@
 
 localparam DECODED_SYNC_PATTERN = 8'b10000000;
 
-localparam TOP_STATE_POWERED = 0;
-localparam TOP_STATE_IDLE = 1;
-localparam TOP_STATE_ACTIVE = 2;
+// these are encoded this way so that there are more invalid states and so
+// that writes are less likely to write invalid and especially valid but
+// incorrect values
+// I had problems with these getting the wrong value and this seems to make
+// that happen less often
+localparam TOP_STATE_POWERED = 3'b001;
+localparam TOP_STATE_IDLE = 3'b010;
+localparam TOP_STATE_ACTIVE = 3'b100;
 
 localparam EOP_NEED_SE0_0 = 0;
 localparam EOP_NEED_SE0_1 = 1;
@@ -41,7 +46,7 @@ module usb(
     wire [9:0] usb_control_data_length = usb_control[9:0];
     wire [1:0] usb_control_response_type = usb_control[11:10];
 
-    reg [1:0] top_state = TOP_STATE_POWERED;
+    reg [2:0] top_state = TOP_STATE_POWERED;
 
     // decoding and sending interface
     reg write_enable = 0;
@@ -89,7 +94,7 @@ module usb(
     reg [31:0] reset_counter = 0; // needs to hold one reset time, TODO could be smaller
 
     // wire-like regs set in the following combinational block
-    reg [1:0] next_top_state;
+    reg [2:0] next_top_state;
     reg [3:0] next_packet_state;
     reg [1:0] next_read_write_clock_counter;
     reg [2:0] next_consecutive_nzri_data_ones;
@@ -115,6 +120,9 @@ module usb(
     reg next_got_usb_packet;
     reg next_write_to_data_buffer;
     reg next_failed_to_read_data;
+
+    // useful for debugging but not used normally
+    reg error;
 
     always @* begin
         next_top_state = top_state;
@@ -143,6 +151,7 @@ module usb(
         next_write_to_data_buffer = write_to_data_buffer;
         next_set_usb_control_data_length = set_usb_control_data_length;
         next_failed_to_read_data = failed_to_read_data;
+        error = 0;
 
         case (top_state)
             TOP_STATE_POWERED: begin
@@ -192,6 +201,10 @@ module usb(
                     // performed in at most 3 48mhz periods
                     next_read_write_buffer = data_buffer_read_value;
                 end
+            end
+            default: begin
+                error = 1;
+                next_top_state = TOP_STATE_IDLE;
             end
         endcase
 
@@ -397,6 +410,7 @@ module usb(
                                 `ifdef simulation
                                     $stop;
                                 `endif
+                                error = 1;
                             end
                         end else begin
                             `ifdef simulation
@@ -521,6 +535,7 @@ module usb(
                                         `ifdef simulation
                                             $stop;
                                         `endif
+                                        error = 1;
                                     end
                                 endcase
                             end else begin
@@ -533,6 +548,7 @@ module usb(
                             `ifdef simulation
                                 $stop;
                             `endif
+                            error = 1;
                         end
                     endcase
                 end
@@ -599,6 +615,14 @@ module usb(
                 next_packet_state = PACKET_STATE_WRITE_FINISH;
             end
             PACKET_STATE_WRITE_FINISH: begin
+                next_write_enable = 0;
+                next_top_state = TOP_STATE_IDLE;
+            end
+            default: begin
+                `ifdef simulation
+                    $stop;
+                `endif
+                error = 1;
                 next_write_enable = 0;
                 next_top_state = TOP_STATE_IDLE;
             end
