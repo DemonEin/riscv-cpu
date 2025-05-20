@@ -17,6 +17,8 @@ module tb_usb();
     wire [3:0] current_data_pid_receive = { data_sync_bit_receive, PID_DATA0[2:0] };
     wire [3:0] current_data_pid_transmit = { data_sync_bit_transmit, PID_DATA0[2:0] };
 
+    wire gpio_1, gpio_2, gpio_3, gpio_4, gpio_5, gpio_6, gpio_7, gpio_8, gpio_9, gpio_10;
+
     reg [7:0] data_list[1023];
     reg [31:0] data_list_length;
 
@@ -35,16 +37,16 @@ module tb_usb();
         r,
         g,
         b,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null
+        gpio_1,
+        gpio_2,
+        gpio_3,
+        gpio_4,
+        gpio_5,
+        gpio_6,
+        gpio_7,
+        gpio_8,
+        gpio_9,
+        gpio_10
     );
 
     initial begin
