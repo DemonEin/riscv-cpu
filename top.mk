@@ -140,7 +140,7 @@ clean:
 readelf: $(target_directory)/a.out
 	readelf -a $<
 
-.PHONY: disassemble
-disassemble: $(target_directory)/a.out
+.PHONY: disassemblesim
+disassemblesim: $(target_directory)/simulation/a.out
 	$(gcc_binary_prefix)objdump -d $<
 
