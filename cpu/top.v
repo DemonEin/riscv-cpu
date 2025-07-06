@@ -38,6 +38,11 @@ module top(
 
     output rst_n
 );
+    // TODO usb does not work correctly without these but I don't know why,
+    // see if and how these can be removed although they are good for debugging
+    assign gpio_10 = usb_d_p;
+    assign gpio_11 = usb_d_n;
+
     // wires for module output
     wire [31:0] memory_address,
         unshifted_memory_write_value,
