@@ -4,6 +4,13 @@ _start:
     lui t0, %hi(on_trap)
     addi t0, t0, %lo(on_trap)
     csrrs zero, mtvec, t0
+
+    # enable external interrupts
+    li t0, (1 << 11)
+    csrrs zero, mie, t0
+
+    csrrs zero, mstatus, (1 << 3) # enable machine interrupts
+
     j main
 
 .weak on_trap
@@ -28,9 +35,3 @@ simulation_putchar:
     ret
 
 #endif
-
-.global enable_external_interrupts
-enable_external_interrupts:
-    li t0, (1 << 11)
-    csrrw zero, mie, t0
-    ret
