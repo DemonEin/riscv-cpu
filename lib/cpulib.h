@@ -18,7 +18,18 @@ enum mcause {
     MCAUSE_MACHINE_EXTERNAL_INTERRUPT = 0x8000000b,
 };
 
-extern volatile bool led;
+enum led_color {
+    LED_COLOR_OFF = 0b000,
+    LED_COLOR_RED = 0b001,
+    LED_COLOR_GREEN = 0b010,
+    LED_COLOR_YELLOW = 0b011,
+    LED_COLOR_BLUE = 0b100,
+    LED_COLOR_MAGENTA = 0b101,
+    LED_COLOR_CYAN = 0b110,
+    LED_COLOR_WHITE = 0b111,
+};
+
+extern volatile enum led_color led;
 
 void set_timer(uint64_t);
 void sleep_for_clock_cycles(uint32_t);

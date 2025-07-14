@@ -22,9 +22,9 @@ module top(
     inout usb_d_n,
 
     output usb_pullup,
-    output rgb_led0_r = ~led_on,
-    output rgb_led0_g = ~led_on,
-    output rgb_led0_b = ~led_on,
+    output rgb_led0_r,
+    output rgb_led0_g,
+    output rgb_led0_b,
 
     output gpio_0,
     output gpio_1,
@@ -42,6 +42,10 @@ module top(
     // see if and how these can be removed although they are good for debugging
     assign gpio_10 = usb_d_p;
     assign gpio_11 = usb_d_n;
+
+    assign rgb_led0_r = led[0];
+    assign rgb_led0_g = led[1];
+    assign rgb_led0_b = led[2];
 
     // wires for module output
     wire [31:0] memory_address,
@@ -118,7 +122,11 @@ module top(
         memory_mapped_register_read_value;
     reg [63:0] mtime, mtimecmp;
     reg [1:0] pending_read_shift;
-    reg led_on = 0;
+    // I would prefer to negate the led value when assiging the output wires,
+    // but that causes usb to not work and I don't know why, same as the
+    // comment about the assigns to gpio 10 and 11; so instead I just negate
+    // all other reads and all writes and then it works
+    reg [2:0] led = ~0;
     reg read_memory_mapped_register;
     reg read_usb_data_buffer;
     reg [31:0] usb_data_buffer_read_value;
@@ -152,7 +160,7 @@ module top(
                 read_memory_mapped_register <= 1;
             end
             ADDRESS_LED[31:2]: begin
-                memory_mapped_register_read_value <= { 31'b0, led_on };
+                memory_mapped_register_read_value <= { 29'b0, ~led };
                 read_memory_mapped_register <= 1;
             end
             // TODO properly support non-word sized memory-mapped registers
@@ -285,7 +293,7 @@ module top(
         endcase
 
         if (memory_address == ADDRESS_LED && memory_write_sections[0]) begin
-            led_on <= memory_write_value[0];
+            led <= ~memory_write_value[2:0];
         end
 
         if (memory_address[31:2] == ADDRESS_USB_DEVICE_ADDRESS[31:2] && memory_write_sections[0]) begin
