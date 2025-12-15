@@ -19,6 +19,8 @@ localparam RESPONSE_TYPE_EMPTY = 2'b00;
 localparam RESPONSE_TYPE_DATA = 2'b01;
 localparam RESPONSE_TYPE_STALL = 2'b10;
 
+localparam RESET_CYCLES = 120; // 120 is the number of cycles in 2.5 microseconds at 48 mhz
+
 module usb(
     input clock48,
     inout usb_d_p,
@@ -91,7 +93,7 @@ module usb(
         end
     end
 
-    reg [31:0] reset_counter = 0; // needs to hold one reset time, TODO could be smaller
+    reg [$clog2(RESET_CYCLES) - 1:0] reset_counter = 0;
 
     // wire-like regs set in the following combinational block
     reg [2:0] next_top_state;
@@ -153,63 +155,56 @@ module usb(
         next_failed_to_read_data = failed_to_read_data;
         error = 0;
 
-        case (top_state)
-            TOP_STATE_POWERED: begin
-                // TODO actually only needs to be 2.5 microseconds
-                if (reset_counter > 48000 * 9) begin
-                    next_top_state = TOP_STATE_IDLE;
-                end
+        if (reset_counter >= RESET_CYCLES) begin
+            next_top_state = TOP_STATE_IDLE;
+        end else if (top_state == TOP_STATE_POWERED) begin
+            // wait for reset
+        end else if (top_state == TOP_STATE_IDLE) begin
+            if (data_k) begin
+                next_top_state = TOP_STATE_ACTIVE;
+                next_packet_state = PACKET_STATE_SYNCING;
+                next_read_write_bits_count = 8;
+                next_previous_data = 1;
+                next_consecutive_nzri_data_ones = 0;
+                next_read_write_clock_counter = 3;
             end
-            TOP_STATE_IDLE: begin
-                if (data_k) begin
-                    next_top_state = TOP_STATE_ACTIVE;
-                    next_packet_state = PACKET_STATE_SYNCING;
-                    next_read_write_bits_count = 8;
-                    next_previous_data = 1;
+        end else if (top_state == TOP_STATE_ACTIVE) begin
+            if (read_write_clock_counter == 3) begin
+                if (stall_counter > 0) begin
+                    next_stall_counter = stall_counter - 1;
+                end
+
+                if (nzri_decoded_data == 1) begin
+                    next_consecutive_nzri_data_ones = consecutive_nzri_data_ones + 1;
+                end else begin
                     next_consecutive_nzri_data_ones = 0;
-                    next_read_write_clock_counter = 3;
                 end
-            end
-            TOP_STATE_ACTIVE: begin
-                if (read_write_clock_counter == 3) begin
-                    if (stall_counter > 0) begin
-                        next_stall_counter = stall_counter - 1;
-                    end
 
-                    if (nzri_decoded_data == 1) begin
-                        next_consecutive_nzri_data_ones = consecutive_nzri_data_ones + 1;
-                    end else begin
-                        next_consecutive_nzri_data_ones = 0;
-                    end
+                next_previous_data = data;
 
-                    next_previous_data = data;
-
-                    if (!skip_bit) begin
-                        next_read_write_buffer = read_bits;
-                        next_data_crc = data_crc[15] ^ nzri_decoded_data
-                                ? (data_crc << 1) ^ 16'b1000000000000101
-                                : (data_crc << 1);
-                        next_token_crc = token_crc[4] ^ nzri_decoded_data
-                                ? (token_crc << 1) ^ 5'b00101
-                                : (token_crc << 1);
-                        // run got_bit after everything else to allow it
-                        // to override other values
-                        got_bit();
-                    end else begin
-                        next_consecutive_nzri_data_ones = 0; // to prevent relying on the input data to reset consecutive_nzri_data_ones
-                    end
-                end else if (pending_load) begin
-                    // the way pending_load works requires the load to be
-                    // performed in at most 3 48mhz periods
-                    next_read_write_buffer = data_buffer_read_value;
+                if (!skip_bit) begin
+                    next_read_write_buffer = read_bits;
+                    next_data_crc = data_crc[15] ^ nzri_decoded_data
+                        ? (data_crc << 1) ^ 16'b1000000000000101
+                        : (data_crc << 1);
+                    next_token_crc = token_crc[4] ^ nzri_decoded_data
+                        ? (token_crc << 1) ^ 5'b00101
+                        : (token_crc << 1);
+                    // run got_bit after everything else to allow it
+                    // to override other values
+                    got_bit();
+                end else begin
+                    next_consecutive_nzri_data_ones = 0; // to prevent relying on the input data to reset consecutive_nzri_data_ones
                 end
+            end else if (pending_load) begin
+                // the way pending_load works requires the load to be
+                // performed in at most 3 48mhz periods
+                next_read_write_buffer = data_buffer_read_value;
             end
-            default: begin
-                error = 1;
-                next_top_state = TOP_STATE_IDLE;
-            end
-        endcase
-
+        end else begin
+            error = 1;
+            next_top_state = TOP_STATE_IDLE;
+        end
     end
 
     localparam PACKET_STATE_WRITE_DATA = 0;
@@ -660,7 +655,7 @@ module usb(
         failed_to_read_data <= next_failed_to_read_data;
 
         if (se0) begin
-            reset_counter <= reset_counter + 1;
+            reset_counter <= reset_counter >= RESET_CYCLES ? RESET_CYCLES : reset_counter + 1;
         end else begin
             reset_counter <= 0;
         end
