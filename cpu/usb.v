@@ -195,6 +195,8 @@ module usb(
                         // run got_bit after everything else to allow it
                         // to override other values
                         got_bit();
+                    end else begin
+                        next_consecutive_nzri_data_ones = 0; // to prevent relying on the input data to reset consecutive_nzri_data_ones
                     end
                 end else if (pending_load) begin
                     // the way pending_load works requires the load to be
