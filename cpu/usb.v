@@ -54,7 +54,7 @@ module usb(
     reg write_enable = 0;
     wire [31:0] read_bits = { nzri_decoded_data, read_write_buffer[31:1] };
     reg [31:0] read_write_buffer;
-    reg [5:0] read_write_bits_count;
+    reg [5:0] read_write_bits_count; // should never be set to 0
 
     wire differential_1 = usb_d_p && !usb_d_n;
     wire differential_0 = !usb_d_p && usb_d_n;
@@ -261,8 +261,8 @@ module usb(
     reg [15:0] data_crc;
     reg failed_to_read_data;
 
-    wire read_complete = read_write_bits_count == 1;
-    wire write_complete = read_write_bits_count == 1;
+    wire read_complete = read_write_bits_count <= 1;
+    wire write_complete = read_write_bits_count <= 1;
 
     reg [4:0] i; 
 
@@ -273,7 +273,7 @@ module usb(
         next_pending_load = 0;
         next_send_eop = 0;
 
-        if (read_write_bits_count > 0) begin
+        if (read_write_bits_count > 1) begin
             next_read_write_bits_count = read_write_bits_count - 1;
         end
 
