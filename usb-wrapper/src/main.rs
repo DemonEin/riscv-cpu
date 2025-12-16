@@ -17,26 +17,22 @@ fn main() {
     let device_handle = got_device.open().unwrap();
 
     let mut stdin = io::stdin();
-    let mut buffer: [u8; 64] = [0; 64];
+    let mut buffer = [0u8; 64];
     loop {
         if let Ok(got_bytes) = stdin.read(&mut buffer) {
-            let mut bytes_to_write = got_bytes;
-            while bytes_to_write > 0 {
-                bytes_to_write -= device_handle
-                    .write_control(
-                        rusb::request_type(
-                            rusb::Direction::Out,
-                            rusb::RequestType::Vendor,
-                            rusb::Recipient::Device,
-                        ),
-                        13, // this is a custom out request type
-                        0,
-                        0,
-                        &buffer[0..1],
-                        Duration::from_millis(500),
-                    )
-                    .unwrap();
-            }
+            let _ = device_handle
+                .write_control(
+                    rusb::request_type(
+                        rusb::Direction::Out,
+                        rusb::RequestType::Vendor,
+                        rusb::Recipient::Device,
+                    ),
+                    13, // this is a custom out request type
+                    0,
+                    0,
+                    &buffer[0..got_bytes],
+                    Duration::from_millis(500),
+                );
         } else {
             break;
         }
