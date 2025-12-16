@@ -1,5 +1,4 @@
 testbench = tb_usb.v
-program_files = usbtest.c
 
 include ../../top.mk
 
