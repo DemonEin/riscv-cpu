@@ -34,8 +34,27 @@ module usb(
     input usb_packet_ready,
     input [6:0] device_address,
     input [15:0] usb_control,
-    output wire [15:0] set_usb_control
+    output wire [15:0] set_usb_control,
+    output gpio_12,
+    output gpio_13,
+    output reg gpio_6
 );
+    assign gpio_12 = usb_debug[0];
+    assign gpio_13 = usb_debug[1];
+
+    assign gpio_6 = error_reg;
+
+    reg error_reg = 0;
+
+    /*
+    always @(posedge clock48) begin
+        if (error) begin
+            gpio_6 <= 1;
+        end
+    end
+    */
+
+    reg [1:0] usb_debug;
     reg [9:0] set_usb_control_data_length;
     // assigning this doesn't work sometimes when in the port connection,
     // so do it here even though I don't know why that wasn't working
@@ -122,6 +141,7 @@ module usb(
     reg next_got_usb_packet;
     reg next_write_to_data_buffer;
     reg next_failed_to_read_data;
+    reg [1:0] next_usb_debug;
 
     // useful for debugging but not used normally
     reg error;
@@ -153,13 +173,15 @@ module usb(
         next_write_to_data_buffer = write_to_data_buffer;
         next_set_usb_control_data_length = set_usb_control_data_length;
         next_failed_to_read_data = failed_to_read_data;
-        error = 0;
+        next_usb_debug = usb_debug;
+        error = error_reg;
 
         if (reset_counter >= RESET_CYCLES) begin
             next_top_state = TOP_STATE_IDLE;
         end else if (top_state == TOP_STATE_POWERED) begin
             // wait for reset
         end else if (top_state == TOP_STATE_IDLE) begin
+            next_usb_debug = 0;
             if (data_k) begin
                 next_top_state = TOP_STATE_ACTIVE;
                 next_packet_state = PACKET_STATE_SYNCING;
@@ -170,6 +192,8 @@ module usb(
             end
         end else if (top_state == TOP_STATE_ACTIVE) begin
             if (read_write_clock_counter == 3) begin
+                error = 0;
+                next_usb_debug = 1;
                 if (stall_counter > 0) begin
                     next_stall_counter = stall_counter - 1;
                 end
@@ -426,6 +450,7 @@ module usb(
                 end
             end
             PACKET_STATE_READING_DATA: begin
+                next_usb_debug = 2;
                 if (se0) begin
                     if (data_crc == 16'b1000000000001101) begin
                         if (words_read_written < 256) begin
@@ -444,6 +469,7 @@ module usb(
                         next_pending_send = 1;
                         next_packet_state = PACKET_STATE_FINISH;
                     end else begin
+                        next_usb_debug = 3;
                         `ifdef simulation
                             $display("got bad data_crc: 0x%h, words_read_written: %b", data_crc, words_read_written);
                             $stop;
@@ -653,6 +679,8 @@ module usb(
         got_usb_packet <= next_got_usb_packet;
         write_to_data_buffer <= next_write_to_data_buffer;
         failed_to_read_data <= next_failed_to_read_data;
+        usb_debug <= next_usb_debug;
+        error_reg <= error;
 
         if (se0) begin
             reset_counter <= reset_counter >= RESET_CYCLES ? RESET_CYCLES : reset_counter + 1;

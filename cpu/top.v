@@ -73,7 +73,10 @@ module top(
         usb_packet_ready,
         usb_device_address[6:0],
         usb_control,
-        usb_usb_control
+        usb_usb_control,
+        gpio_12,
+        gpio_13,
+        gpio_6
     );
 
     // continuously assigned wires and wire-like regs
