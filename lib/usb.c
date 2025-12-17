@@ -100,7 +100,7 @@ enum handshake {
 #define MAX_PACKET_SIZE 64
 
 #define USB_DATA_BUFFER_LENGTH 1023
-extern volatile uint8_t usb_data_buffer[USB_DATA_BUFFER_LENGTH];
+extern uint8_t usb_data_buffer[USB_DATA_BUFFER_LENGTH];
 
 /* bits 0-9: length of data in bytes, bidirectional
  * bits 10-11: when receiving an interrupt, an enum transaction that is the transaction that was just done
@@ -194,10 +194,8 @@ static struct response send_device_descriptor() {
     const uint16_t bytes_to_send_this_packet =
         min(total_transaction_bytes - data_bytes_sent, MAX_PACKET_SIZE);
 
-    // casting away volatile, TODO check if that's ok, really this isn't written by anything else until
-    // the write to usb_control
     memcpy(
-        (void*)usb_data_buffer,
+        usb_data_buffer,
         (const uint8_t*)&device_descriptor + data_bytes_sent,
         bytes_to_send_this_packet
     );
@@ -217,12 +215,12 @@ static struct response send_configuration() {
         : 0;
     const uint8_t interface_bytes_to_send = bytes_to_send_this_packet - configuration_bytes_to_send;
     memcpy(
-        (void*)usb_data_buffer,
+        usb_data_buffer,
         (const uint8_t*)&configuration + data_bytes_sent,
         configuration_bytes_to_send
     );
     memcpy(
-        (uint8_t*)usb_data_buffer + configuration_bytes_to_send,
+        usb_data_buffer + configuration_bytes_to_send,
         (const uint8_t*)&interface + (INTERFACE_DESCRIPTOR_SIZE - interface_bytes_to_send),
         interface_bytes_to_send
     );
@@ -246,7 +244,7 @@ make_default_control_endpoint_response(enum transaction transaction, uint16_t da
     if (transaction == TRANSACTION_SETUP) {
         in_control_transfer = true;
         // TODO consider whether I need all the data
-        setup_data = *(volatile struct setup_data*)usb_data_buffer;
+        setup_data = *(struct setup_data*)usb_data_buffer;
     }
 
     switch (setup_data.bRequest) {
@@ -391,5 +389,9 @@ void handle_usb_transaction() {
         result_usb_control |= response.data_length & 0x3ff;
     }
 
+    // barrier to make sure the volatile write is after all writes
+    // to usb_data_buffer
+    __asm__ volatile ("" : : : "memory");
+    
     usb_control = result_usb_control;
 }
