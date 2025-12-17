@@ -3,7 +3,7 @@
 # default:
 DisableFormat: true
 ---
-Language: Cpp
+Language: C
 DisableFormat: false
 
 AccessModifierOffset: -4
