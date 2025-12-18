@@ -42,6 +42,7 @@ localparam FUNCT3_SRA = 3'b101;
 localparam FUNCT3_OR = 3'b110;
 localparam FUNCT3_AND = 3'b111;
 
+localparam FUNCT3_FENCE = 3'b000;
 localparam FUNCT3_PRIV = 3'b000;
 
 localparam FUNCT3_CSRRW = 3'b001;
@@ -400,6 +401,11 @@ module core(
                         register_write_value_1 = { 31'b0, comparator_result };
                     end else begin
                         register_write_value_1 = alu_result;
+                    end
+                end
+                OPCODE_FENCE: begin
+                    if (funct3 != FUNCT3_FENCE) begin
+                        raise_illegal_instruction();
                     end
                 end
                 OPCODE_SYSTEM: begin

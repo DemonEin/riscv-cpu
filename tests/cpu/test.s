@@ -138,6 +138,8 @@ _start:
     lw t1, 0(sp)
     bne t0, t1, fail
 
+    fence
+
 unimp_test:
     unimp
 
