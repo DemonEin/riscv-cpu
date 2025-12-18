@@ -11,7 +11,7 @@ current_directory := $(dir $(lastword $(MAKEFILE_LIST)))
 needed_verilog_files := $(foreach file, top.v core.v comparator.v alu.v registers.v usb_constants.v usb.v, $(current_directory)cpu/$(file))
 
 VERILATOR_OPTIONS := +1364-2005ext+v -Wwarn-BLKSEQ -y $(current_directory)cpu
-GCC_OPTIONS := -march=rv32i_zicsr -mabi=ilp32 -std=c23 -Wpedantic
+GCC_OPTIONS := -march=rv32i_zicsr -mabi=ilp32 -std=c23 -Wall
 
 testbench ?= $(current_directory)/tb_top.v
 

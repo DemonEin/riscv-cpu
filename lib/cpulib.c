@@ -8,9 +8,13 @@ static int __stdout_putc(char c, FILE* file) {
     return c;
 }
 
-#define STDERR_BUFFER_LENGTH 32
+#ifndef SIMULATION
+
+    #define STDERR_BUFFER_LENGTH 32
 static char stderr_buffer[STDERR_BUFFER_LENGTH];
 static size_t stderr_buffer_index = 0;
+
+#endif
 
 static int __stderr_putc(char c, FILE* file) {
 #ifdef SIMULATION
