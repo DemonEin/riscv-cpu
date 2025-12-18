@@ -1,3 +1,3 @@
-program_files = usbtest.c
+program_files = main.c
 
 include ../../top.mk
