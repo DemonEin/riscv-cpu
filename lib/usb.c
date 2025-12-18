@@ -176,10 +176,10 @@ struct response {
 #define RESPONSE_STALL ((struct response){ RESPONSE_TYPE_STALL, 0 })
 
 #define BULK_READ_BUFFER_LENGTH 64
-volatile struct bulk_read_ring_buffer {
+struct bulk_read_ring_buffer {
     const size_t length;
-    size_t read_index;
-    size_t write_index;
+    atomic_size_t read_index;
+    atomic_size_t write_index;
     uint8_t buffer[BULK_READ_BUFFER_LENGTH];
 } bulk_read_ring_buffer = {
     BULK_READ_BUFFER_LENGTH,
@@ -344,9 +344,8 @@ make_default_control_endpoint_response(enum transaction transaction, uint16_t da
                 case TRANSACTION_SETUP:
                     return RESPONSE_EMPTY;
                 case TRANSACTION_OUT:
-                    // casting away volatile, TODO check
                     const size_t bytes_written = ring_buffer_write(
-                        (volatile struct ring_buffer*)&bulk_read_ring_buffer,
+                        (struct ring_buffer*)&bulk_read_ring_buffer,
                         usb_data_buffer,
                         data_length
                     );

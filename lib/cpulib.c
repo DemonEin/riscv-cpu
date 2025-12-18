@@ -1,4 +1,5 @@
 #include "cpulib.h"
+#include <stdatomic.h>
 #include <stdio.h>
 
 static int __stdout_putc(char c, FILE* file) {
@@ -88,13 +89,13 @@ void hexdump(const uint8_t* buffer, size_t length) {
 // when read_index == write_index there is no data to read
 // when write_index is one position before read_index the buffer is full
 
-size_t
-ring_buffer_read(volatile struct ring_buffer* ring_buffer, uint8_t* out_buffer, size_t size) {
+size_t ring_buffer_read(struct ring_buffer* ring_buffer, uint8_t* out_buffer, size_t size) {
     const size_t length = ring_buffer->length;
     size_t read_index = ring_buffer->read_index;
-    volatile uint8_t* buffer = ring_buffer->buffer;
-    // this one is at the end to give as much time as possible for there to be more data
-    const size_t write_index = ring_buffer->write_index;
+    uint8_t* buffer = ring_buffer->buffer;
+
+    const size_t write_index =
+        atomic_load_explicit(&ring_buffer->write_index, memory_order_acquire);
 
     size_t bytes_read = 0;
     while (read_index != write_index && bytes_read < size) {
@@ -107,17 +108,16 @@ ring_buffer_read(volatile struct ring_buffer* ring_buffer, uint8_t* out_buffer, 
         bytes_read++;
     }
 
-    ring_buffer->read_index = read_index;
+    atomic_store_explicit(&ring_buffer->read_index, read_index, memory_order_release);
     return bytes_read;
 }
 
-size_t
-ring_buffer_write(volatile struct ring_buffer* ring_buffer, const uint8_t* in_buffer, size_t size) {
+size_t ring_buffer_write(struct ring_buffer* ring_buffer, const uint8_t* in_buffer, size_t size) {
     const size_t length = ring_buffer->length;
     size_t write_index = ring_buffer->write_index;
-    volatile uint8_t* buffer = ring_buffer->buffer;
-    // this one is at the end to give as much time as possible for data to be read
-    const size_t read_index = ring_buffer->read_index;
+    uint8_t* buffer = ring_buffer->buffer;
+
+    const size_t read_index = atomic_load_explicit(&ring_buffer->read_index, memory_order_acquire);
 
     size_t bytes_written = 0;
     size_t next_write_index = write_index + 1;
@@ -139,18 +139,14 @@ ring_buffer_write(volatile struct ring_buffer* ring_buffer, const uint8_t* in_bu
         bytes_written++;
     }
 
-    ring_buffer->write_index = write_index;
+    atomic_store_explicit(&ring_buffer->write_index, write_index, memory_order_release);
     return bytes_written;
 }
 
-extern volatile struct bulk_read_ring_buffer* bulk_read_ring_buffer;
+extern struct bulk_read_ring_buffer* bulk_read_ring_buffer;
 
 size_t usb_read(uint8_t* out_buffer, size_t max_size) {
-    return ring_buffer_read(
-        (volatile struct ring_buffer*)&bulk_read_ring_buffer,
-        out_buffer,
-        max_size
-    );
+    return ring_buffer_read((struct ring_buffer*)&bulk_read_ring_buffer, out_buffer, max_size);
 }
 
 #define MORSE_TIME_UNIT 200 // in ms

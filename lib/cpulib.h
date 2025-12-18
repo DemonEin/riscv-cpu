@@ -1,5 +1,6 @@
 #include <stddef.h>
 #include <stdint.h>
+#include <stdatomic.h>
 
 #define CLOCK_FREQUENCY 12000000
 
@@ -45,17 +46,17 @@ void hexdump(const uint8_t*, size_t);
 
 struct ring_buffer {
     const size_t length;
-    size_t read_index;
-    size_t write_index;
+    atomic_size_t read_index;
+    atomic_size_t write_index;
     uint8_t buffer[];
 };
 
 // returns the number of bytes read
 size_t
-ring_buffer_read(volatile struct ring_buffer* ring_buffer, uint8_t* out_buffer, size_t max_size);
+ring_buffer_read(struct ring_buffer* ring_buffer, uint8_t* out_buffer, size_t max_size);
 
 // returns the number of bytes written
 size_t
-ring_buffer_write(volatile struct ring_buffer* ring_buffer, const uint8_t* in_buffer, size_t size);
+ring_buffer_write(struct ring_buffer* ring_buffer, const uint8_t* in_buffer, size_t size);
 
 size_t usb_read(uint8_t* out_buffer, size_t max_size);
