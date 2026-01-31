@@ -30,6 +30,9 @@ dependencies:
 * [nextpnr-ecp5](https://github.com/YosysHQ/nextpnr) - nightly version required
 * [dfu-util](https://dfu-util.sourceforge.net)
 
+On Arch Linux, it is sufficient to install `nextpnr-ecp5-nightly` from the AUR
+(it has `yosys-nightly` as a dependency) and the official `dfu-util` package
+
 With the OrangeCrab board plugged in via USB, run `make sim` from an example
 program's directory. For example, to run the blink program on the hardware, run
 ```
